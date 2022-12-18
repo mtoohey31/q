@@ -80,7 +80,6 @@ type drawer interface {
 // with knowledge of where the horizontal split is since there is a joining '┴'
 // in the bottom line.
 type horizRatioSplitDrawer struct {
-	// TODO: allow hiding of left
 	ratio       float32
 	left, right drawer
 }
@@ -134,8 +133,6 @@ type dynWDrawer interface {
 	// to fill the range w..maxW.
 	dynWDraw(d drawFunc, maxW, h int) (w int, err error)
 }
-
-// TODO: figure out how to break less rules with this
 
 // coverDynWDrawer draws the cover of a song. It breaks all the rules cause it
 // writes directly to stdout instead of calling the drawFunc, and it gets its
@@ -364,9 +361,11 @@ type progressDrawer struct {
 	repeatRSMap map[repeat]runeStylePair
 	shuffleR    rune
 
-	prevDrawer   drawFunc
-	prevW        *int
-	cancelDrawer chan struct{}
+	prevDrawer drawFunc
+	prevW      *int
+
+	cancelBarDrawer  chan struct{}
+	cancelTimeDrawer chan struct{}
 }
 
 func newProgressDrawer(canDisplay func(rune) bool) *progressDrawer {
@@ -431,6 +430,35 @@ func (p *progressDrawer) drawShuffle() {
 	p.prevDrawer((*p.prevW)/2-5, 0, p.shuffleR, s)
 }
 
+func (p *progressDrawer) widths() (dW, barW int) {
+	// the total duration of the current song
+	totalD := (*p.format).SampleRate.D((*p.streamSeekCloser).Len()).Truncate(time.Second)
+
+	dW = 2 // first seconds digit and 's'
+
+	// the second seconds digit
+	if totalD >= time.Second*10 {
+		dW++
+	}
+
+	// the first minutes digit and 'm'
+	if totalD >= time.Minute {
+		dW += 2
+	}
+
+	// the second minutes digit
+	if totalD >= time.Minute*10 {
+		dW++
+	}
+
+	// the remaining hours digits and 'h'
+	if totalD >= time.Hour {
+		dW += int(math.Floor(math.Log10(float64(totalD/time.Hour)))) + 2
+	}
+
+	return dW, (*p.prevW) - (2*dW + 2)
+}
+
 func (p *progressDrawer) drawBar() {
 	if *p.streamSeekCloser == nil || p.prevDrawer == nil {
 		return
@@ -441,41 +469,32 @@ func (p *progressDrawer) drawBar() {
 	totalD := (*p.format).SampleRate.D((*p.streamSeekCloser).Len())
 	totalS := totalD.Truncate(time.Second).String()
 
-	// TODO: compute this dynamically to take into account tracks that are less
-	// than 1 minute, and tracks that have longer durations than 9 minutes
-	const dW = 5
+	dW, barW := p.widths()
 	currS = strings.Repeat(" ", dW-len(currS)) + currS
 	totalS = strings.Repeat(" ", dW-len(totalS)) + totalS
 
 	drawString(offset(p.prevDrawer, 0, 1), -1, currS, tcell.StyleDefault)
 	p.prevDrawer(dW, 1, '|', tcell.StyleDefault)
 
-	barLen := *p.prevW - (dW*2 + 2)
-	if barLen < 0 {
-		return
-	}
-	// TODO: may truncate, reduce into float32 range as integers, then float32
-	// divide from there
-	progress := float32(currD) / float32(totalD)
-	barCompleteLen := int(progress * float32(barLen))
-	drawString(offset(p.prevDrawer, dW+1, 1), -1, strings.Repeat("█", barCompleteLen)+
-		strings.Repeat(" ", barLen-barCompleteLen), tcell.StyleDefault)
+	progress := float64(currD) / float64(totalD)
+	barCompleteW := int(progress * float64(barW))
+	drawString(offset(p.prevDrawer, dW+1, 1), -1, strings.Repeat("█", barCompleteW)+
+		strings.Repeat(" ", barW-barCompleteW), tcell.StyleDefault)
 
 	p.prevDrawer(*p.prevW-dW-1, 1, '|', tcell.StyleDefault)
 	drawString(offset(p.prevDrawer, *p.prevW-dW, 1), -1, totalS, tcell.StyleDefault)
 }
 
-// TODO: use separate drawers for the time (always updates at 1s frequency)
-// and the bar, which updates at a frequency which depends on the length of
-// the current song
-func (p *progressDrawer) spawnBarDrawer(show func()) {
-	if p.cancelDrawer != nil {
+func (p *progressDrawer) spawnProgressDrawers(show func()) {
+	if p.cancelBarDrawer != nil {
 		// drawer already running
 		return
 	}
 
-	p.cancelDrawer = make(chan struct{})
+	p.cancelBarDrawer = make(chan struct{})
+	p.cancelTimeDrawer = make(chan struct{})
 
+	// bar drawer
 	go func() {
 		for {
 			if p.prevW != nil {
@@ -483,28 +502,44 @@ func (p *progressDrawer) spawnBarDrawer(show func()) {
 				show()
 			}
 
-			// TODO: calculate bar width intelligently here instead of
-			// hard-coding stuff
-			barWidth := (*p.prevW) - 12
-			if barWidth <= 0 {
-				barWidth = 1
-			}
-
-			// initially, the time it takes an extra block to need to be drawn
-			// on the progress bar
-			redrawTime := (p.format).SampleRate.D((*p.streamSeekCloser).Len() / barWidth)
-			if redrawTime > time.Second {
-				redrawTime = time.Second
-			}
+			// the time it takes to draw one section of the bar
+			_, barW := p.widths()
+			redrawTime := (p.format).SampleRate.D((*p.streamSeekCloser).Len() / barW)
 
 			select {
 			case <-time.After(redrawTime):
-			case <-p.cancelDrawer:
-				p.cancelDrawer = nil
+			case <-p.cancelBarDrawer:
 				return
 			}
 		}
 	}()
+
+	// time drawer
+	go func() {
+		for {
+			if p.prevW != nil {
+				p.drawBar()
+				show()
+			}
+
+			select {
+			case <-time.After(time.Second):
+			case <-p.cancelTimeDrawer:
+				return
+			}
+		}
+	}()
+}
+
+func (p *progressDrawer) cancelProgressDrawers() {
+	if p.cancelBarDrawer != nil {
+		close(p.cancelBarDrawer)
+		p.cancelBarDrawer = nil
+	}
+	if p.cancelTimeDrawer != nil {
+		close(p.cancelTimeDrawer)
+		p.cancelTimeDrawer = nil
+	}
 }
 
 func (p *progressDrawer) draw(d drawFunc, w, _ int) error {

@@ -183,7 +183,7 @@ func (a *app) loop() error {
 			a.draw()
 			if !sawInitialResize {
 				sawInitialResize = true
-				a.progressDrawer.spawnBarDrawer(a.screen.Show)
+				a.progressDrawer.spawnProgressDrawers(a.screen.Show)
 			}
 
 		case *tcell.EventKey:
@@ -330,12 +330,10 @@ func (a *app) cyclePause() {
 	speaker.Unlock()
 	a.progressDrawer.drawPause()
 	if a.paused {
+		a.progressDrawer.cancelProgressDrawers()
 		a.progressDrawer.drawBar()
-		if a.progressDrawer.cancelDrawer != nil {
-			close(a.progressDrawer.cancelDrawer)
-		}
 	} else if len(a.queue) > 0 {
-		a.progressDrawer.spawnBarDrawer(a.screen.Show)
+		a.progressDrawer.spawnProgressDrawers(a.screen.Show)
 	}
 }
 
@@ -472,9 +470,7 @@ func (a *app) playQueueTopLocked() {
 	} else {
 		a.streamSeekCloser = nil
 		a.streamer = nil
-		if a.progressDrawer.cancelDrawer != nil {
-			close(a.progressDrawer.cancelDrawer)
-		}
+		a.progressDrawer.cancelProgressDrawers()
 	}
 }
 
