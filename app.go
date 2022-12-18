@@ -14,22 +14,21 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// TODO: check draw errors
-
 type app struct {
 	// constant configuration options
 	sampleRate beep.SampleRate
 
 	// internal state
-	paused        bool
-	queue         []*track.Track
-	repeat        types.Repeat
-	queueFocusIdx int
+	paused bool
+	repeat types.Repeat
 	// if nil, shuffle is disabled; if non-nil, when repeat is enabled, the
 	// value is the index within the queue of the first song that has already
 	// been played on this repetition
-	shuffleIdx *int
-	warning    error
+	shuffleIdx    *int
+	queueFocusIdx int
+	queue         []*track.Track
+	clipboard     *track.Track
+	warning       error
 
 	// drawers
 	rootDrawer                draw.DrawSetScoper
@@ -290,6 +289,9 @@ func (a *app) loop() error {
 				case 'r':
 					a.cycleRepeat()
 
+				case 'p', 'P':
+					a.paste(ev.Rune() == 'P')
+
 				case 'n':
 					a.skip()
 
@@ -326,11 +328,37 @@ func (a *app) queueFocusShift(i int) {
 	}
 }
 
-// TODO: put the removed track in a clipboard thing so that people can cut and
-// paste. Maybe allow yank too? That would really only let you duplicate songs
-// so idk if that's useful... but it probably wouldn't be hard to support
-// either so...
+func (a *app) paste(before bool) {
+	if a.clipboard == nil {
+		return
+	}
+
+	if !before {
+		a.queueFocusIdx++
+	}
+	if a.shuffleIdx != nil {
+		if *a.shuffleIdx >= a.queueFocusIdx {
+			*a.shuffleIdx++
+		}
+	}
+	a.queue = append(a.queue[:a.queueFocusIdx],
+		append([]*track.Track{a.clipboard}, a.queue[a.queueFocusIdx:]...)...)
+	a.clipboard = nil
+
+	if a.queueFocusIdx == 0 {
+		a.playQueueTop()
+		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+	}
+	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+}
+
 func (a *app) removeFocused() {
+	if len(a.queue) == 0 {
+		return
+	}
+
+	a.clipboard = a.queue[a.queueFocusIdx]
+
 	if a.shuffleIdx != nil && *a.shuffleIdx > a.queueFocusIdx {
 		*a.shuffleIdx--
 	}
@@ -351,10 +379,17 @@ func (a *app) removeFocused() {
 
 func (a *app) jumpFocused() {
 	if a.queueFocusIdx == 0 {
+		wasPaused := a.paused
 		if a.streamSeekCloser != nil {
 			speaker.Lock()
+			if a.paused {
+				a.paused = false
+			}
 			a.warnfIf(a.streamSeekCloser.Seek(0), "failed to seek ssc")
 			speaker.Unlock()
+		}
+		if wasPaused {
+			a.progressDrawer.DrawPause()
 		}
 		a.progressDrawer.DrawBar()
 
@@ -382,6 +417,14 @@ func (a *app) jumpFocused() {
 	a.queueFocusIdx = 0
 
 	a.playQueueTop()
+
+	if a.paused {
+		speaker.Lock()
+		a.paused = false
+		speaker.Unlock()
+		a.progressDrawer.DrawPause()
+	}
+
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
 }
