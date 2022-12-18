@@ -14,6 +14,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+// TODO: check draw errors
+
 type app struct {
 	// constant configuration options
 	sampleRate beep.SampleRate
@@ -27,6 +29,7 @@ type app struct {
 	// value is the index within the queue of the first song that has already
 	// been played on this repetition
 	shuffleIdx *int
+	warning    error
 
 	// drawers
 	rootDrawer                draw.DrawSetScoper
@@ -41,12 +44,41 @@ type app struct {
 	screen           tcell.Screen
 }
 
-// TODO: add warning error type that only displays the error and doesn't crash
-// the program
+func (a *app) fatalf(err error, format string, args ...any) {
+	err = fmt.Errorf(fmt.Sprintf("%s: %%w", format), append(args, err)...)
+	if err := a.screen.PostEvent(tcell.NewEventError(err)); err != nil {
+		// if we drop an error event and fail to exit with it properly,
+		// panicking is better than ignoring the error
+		a.screen.Fini()
+		panic(err)
+	}
+}
 
-func (app *app) fatalf(err error, format string, a ...any) {
-	err = fmt.Errorf(fmt.Sprintf("%s: %%w", format), append(a, err)...)
-	app.screen.PostEvent(tcell.NewEventError(err))
+func (a *app) fatalfIf(err error, format string, args ...any) {
+	if err != nil {
+		a.fatalf(err, format, args...)
+	}
+}
+
+// warning wraps an error to indicate that it should be considered non-fatal
+type warning struct {
+	err error
+}
+
+func (w *warning) Error() string {
+	return w.err.Error()
+}
+
+func (a *app) warnf(err error, format string, args ...any) {
+	err = fmt.Errorf(fmt.Sprintf("%s: %%w", format), append(args, err)...)
+	// if we drop a warning, we don't need to panic like with fatalf
+	_ = a.screen.PostEvent(tcell.NewEventInterrupt(warning{err}))
+}
+
+func (a *app) warnfIf(err error, format string, args ...any) {
+	if err != nil {
+		a.warnf(err, format, args...)
+	}
 }
 
 // Err implements beep.Streamer
@@ -60,17 +92,26 @@ func (a *app) Stream(samples [][2]float64) (n int, ok bool) {
 
 	if !a.paused && a.streamer != nil {
 		var ok bool
+		var err error
+
 		silenceFrom, ok = a.streamer.Stream(samples)
 		if !ok {
-			// if the streamer failed, try posting an error
-			if err := a.streamer.Err(); err != nil {
-				a.fatalf(err, "streamer failed")
-			}
+			// if the streamer failed, warn and set err so that we'll skip
+			// below
+			err = a.streamer.Err()
+			a.warnfIf(err, "streamer failed")
 		}
 
 		// if the streamer didn't fill samples, try skipping to the next song
 		if silenceFrom < len(samples) {
-			a.skipLocked()
+			// if we ran into an error with the current streamer, drop it from
+			// the queue while calling skip
+			r := a.repeat
+			if !ok && err != nil {
+				r = types.RepeatNone
+			}
+
+			a.skipLocked(r)
 			// recursively continue streaming after the skip to avoid silence,
 			// if there's no now-playing song after the skip, the recurisve
 			// call will realize this and fill the rest of samples with silence
@@ -86,8 +127,8 @@ func (a *app) Stream(samples [][2]float64) (n int, ok bool) {
 	return len(samples), true
 }
 
-func newApp(options appOptions) (*app, error) {
-	a := &app{
+func newApp(options appOptions) (a *app, err error) {
+	a = &app{
 		sampleRate: beep.SampleRate(options.SampleRate),
 		repeat:     options.Repeat,
 	}
@@ -96,7 +137,6 @@ func newApp(options appOptions) (*app, error) {
 		a.shuffleIdx = &shuffleIdx
 	}
 
-	var err error
 	a.screen, err = tcell.NewScreen()
 	if err != nil {
 		return nil, err
@@ -105,6 +145,13 @@ func newApp(options appOptions) (*app, error) {
 	if err := a.screen.Init(); err != nil {
 		return nil, err
 	}
+	defer func() {
+		// if we encounter a failure starting the app, we should revert the
+		// screen before returning
+		if err != nil {
+			a.screen.Fini()
+		}
+	}()
 
 	a.queue = make([]*track.Track, len(options.Paths))
 	for i, path := range options.Paths {
@@ -125,6 +172,7 @@ func newApp(options appOptions) (*app, error) {
 	a.progressDrawer.Paused = &a.paused
 	a.progressDrawer.Repeat = &a.repeat
 	a.progressDrawer.ShuffleIdx = &a.shuffleIdx
+	a.progressDrawer.Warning = &a.warning
 
 	a.queueDrawer = &draw.QueueDrawer{
 		Queue:         &a.queue,
@@ -168,16 +216,30 @@ func (a *app) loop() error {
 
 	for {
 		switch ev := a.screen.PollEvent().(type) {
+		case *tcell.EventInterrupt:
+			if w, ok := ev.Data().(warning); ok {
+				a.warning = w.err
+				go func(e error) {
+					// if the message is still the same one in 1 second, clear it
+					time.Sleep(time.Second)
+					if a.warning == e {
+						a.warning = nil
+						a.progressDrawer.DrawWarning()
+						a.screen.Show()
+					}
+				}(w.err)
+			}
+
 		case *tcell.EventError:
-			return fmt.Errorf("error event: %w", ev)
+			return fmt.Errorf("%w", ev)
 
 		case *tcell.EventResize:
 			w, h := ev.Size()
 			a.rootDrawer.SetScope(func(x, y int, r rune, s tcell.Style) {
 				a.screen.SetContent(x, y, r, nil, s)
 			}, w, h)
-			a.coverDrawer.Clear()
-			a.rootDrawer.Draw()
+			a.fatalfIf(a.coverDrawer.Clear(), "cover clear failed")
+			a.fatalfIf(a.rootDrawer.Draw(), "root draw failed")
 			if a.streamSeekCloser != nil && !a.paused {
 				a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
 			}
@@ -260,7 +322,7 @@ func (a *app) queueFocusShift(i int) {
 	a.queueFocusIdx = newIdx
 
 	if i != 0 {
-		a.queueDrawer.Draw()
+		a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 	}
 }
 
@@ -277,22 +339,22 @@ func (a *app) removeFocused() {
 
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
-		a.bottomDrawer.Draw()
+		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
 	}
 
 	if a.queueFocusIdx >= len(a.queue) {
 		a.queueFocusIdx = len(a.queue) - 1
 	}
 
-	a.queueDrawer.Draw()
+	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
 }
 
 func (a *app) jumpFocused() {
 	if a.queueFocusIdx == 0 {
 		if a.streamSeekCloser != nil {
-			if err := a.streamSeekCloser.Seek(0); err != nil {
-				a.fatalf(err, "failed to seek ssc")
-			}
+			speaker.Lock()
+			a.warnfIf(a.streamSeekCloser.Seek(0), "failed to seek ssc")
+			speaker.Unlock()
 		}
 		a.progressDrawer.DrawBar()
 
@@ -302,7 +364,6 @@ func (a *app) jumpFocused() {
 	switch a.repeat {
 	case types.RepeatNone:
 		a.queue = a.queue[a.queueFocusIdx:]
-		a.queueFocusIdx = 0
 	case types.RepeatTrack, types.RepeatQueue:
 		if a.shuffleIdx != nil {
 			if *a.shuffleIdx >= a.queueFocusIdx {
@@ -321,8 +382,8 @@ func (a *app) jumpFocused() {
 	a.queueFocusIdx = 0
 
 	a.playQueueTop()
-	a.queueDrawer.Draw()
-	a.bottomDrawer.Draw()
+	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
 }
 
 func (a *app) cyclePause() {
@@ -378,30 +439,35 @@ func (a *app) reshuffle() {
 		shuffle(a.queue[*a.shuffleIdx:])
 	}
 
-	a.queueDrawer.Draw()
+	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
 }
 
 func (a *app) skip() {
 	speaker.Lock()
-	a.skipLocked()
+	a.skipLocked(a.repeat)
 	speaker.Unlock()
 }
 
-func (a *app) skipLocked() {
+func (a *app) skipLocked(r types.Repeat) {
 	if len(a.queue) == 0 {
 		return
 	}
 
-	if a.repeat == types.RepeatTrack || (a.repeat == types.RepeatQueue && len(a.queue) == 1) {
+	if r == types.RepeatTrack || (r == types.RepeatQueue && len(a.queue) == 1) {
+		if a.streamSeekCloser == nil {
+			return
+		}
+
 		if err := a.streamSeekCloser.Seek(0); err != nil {
-			a.fatalf(err, "failed to seek ssc")
+			a.warnf(err, "failed to seek ssc")
+			a.skipLocked(types.RepeatNone)
 		}
 
 		return
 	}
 
 	// update queue
-	if a.repeat == types.RepeatNone {
+	if r == types.RepeatNone {
 		a.queue = a.queue[1:]
 		if a.queueFocusIdx >= len(a.queue) {
 			a.queueFocusIdx = len(a.queue) - 1
@@ -429,8 +495,8 @@ func (a *app) skipLocked() {
 
 	a.playQueueTopLocked()
 
-	a.queueDrawer.Draw()
-	a.bottomDrawer.Draw()
+	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
+	a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
 }
 
 // callers are required to verify that queue[0] exists
@@ -443,17 +509,15 @@ func (a *app) playQueueTop() {
 // callers are required to verify that queue[0] exists
 func (a *app) playQueueTopLocked() {
 	if a.streamSeekCloser != nil {
-		if err := a.streamSeekCloser.Close(); err != nil {
-			a.fatalf(err, "failed to close ssc")
-		}
+		a.warnfIf(a.streamSeekCloser.Close(), "failed to close ssc")
 	}
 
 	if len(a.queue) > 0 {
 		var err error
 		a.streamSeekCloser, a.format, err = a.queue[0].Decode()
 		if err != nil {
-			a.fatalf(err, "failed to decode queue[0]")
-			a.skipLocked()
+			a.warnf(err, "failed to decode queue[0]")
+			a.skipLocked(a.repeat)
 			return
 		}
 
@@ -475,11 +539,8 @@ func (a *app) seekBy(d time.Duration, reverse bool) {
 	if newP > a.streamSeekCloser.Len() {
 		newP = a.streamSeekCloser.Len() - 1
 	}
-	err := a.streamSeekCloser.Seek(newP)
+	a.warnfIf(a.streamSeekCloser.Seek(newP), "failed to seekBy")
 	speaker.Unlock()
-	if err != nil {
-		a.fatalf(err, "failed to seekBy")
-	}
 
 	a.progressDrawer.DrawBar()
 }
@@ -489,15 +550,8 @@ func (a *app) seekPercent(p float32) {
 		panic(fmt.Sprintf("seekPercent called with invalid percent %f", p))
 	}
 	speaker.Lock()
-	err := a.streamSeekCloser.Seek(int(float32(a.streamSeekCloser.Len()) * p))
+	a.warnfIf(a.streamSeekCloser.Seek(int(float32(a.streamSeekCloser.Len())*p)), "failed to seekPercent")
 	speaker.Unlock()
-	if err != nil {
-		a.fatalf(err, "failed to seekPercent")
-	}
 
 	a.progressDrawer.DrawBar()
-}
-
-func (a *app) close() {
-	a.screen.Fini()
 }

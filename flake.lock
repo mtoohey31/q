@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "errcheck-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1657582739,
+        "narHash": "sha256-lx1kbRyL9OJzTxClIej/FisfVRh2VG98HGOBuF359LI=",
+        "owner": "kisielk",
+        "repo": "errcheck",
+        "rev": "3faf0bc8574bd40c9635d7910b25dd81349f6e89",
+        "type": "github"
+      },
+      "original": {
+        "owner": "kisielk",
+        "repo": "errcheck",
+        "type": "github"
+      }
+    },
     "gow-src": {
       "flake": false,
       "locked": {
@@ -33,6 +49,7 @@
     },
     "root": {
       "inputs": {
+        "errcheck-src": "errcheck-src",
         "gow-src": "gow-src",
         "nixpkgs": "nixpkgs",
         "utils": "utils"

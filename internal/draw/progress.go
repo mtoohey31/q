@@ -10,9 +10,6 @@ import (
 	"mtoohey.com/q/internal/types"
 )
 
-// TODO: divide this up into separate drawers for time, bar, and each of the
-// three status icons
-
 type runeStylePair struct {
 	r rune
 	s tcell.Style
@@ -29,6 +26,7 @@ type ProgressDrawer struct {
 	Paused           *bool
 	Repeat           *types.Repeat
 	ShuffleIdx       **int
+	Warning          *error
 
 	cancelDrawers chan struct{}
 	scope
@@ -115,6 +113,8 @@ func (p *ProgressDrawer) widths() (dW, barW int) {
 
 func (p *ProgressDrawer) DrawBar() {
 	if *p.StreamSeekCloser == nil {
+		clear(offset(p.d, 0, 1), p.w, 1)
+
 		return
 	}
 
@@ -134,13 +134,15 @@ func (p *ProgressDrawer) DrawBar() {
 	barCompleteW := int(progress * float64(barW))
 	drawString(offset(p.scope.d, dW+1, 1), -1, strings.Repeat("█", barCompleteW), tcell.StyleDefault)
 
-	// the fractional part of a box not drawn, should be between 0 and 1
-	remainder := progress*float64(barW) - float64(barCompleteW)
-	partialBoxes := [8]rune{' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'}
-	p.scope.d(dW+1+barCompleteW, 1, partialBoxes[int(remainder*8)], tcell.StyleDefault)
+	if barCompleteW != barW {
+		// the fractional part of a box not drawn, should be between 0 and 1
+		remainder := progress*float64(barW) - float64(barCompleteW)
+		partialBoxes := [8]rune{' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'}
+		p.scope.d(dW+1+barCompleteW, 1, partialBoxes[int(remainder*8)], tcell.StyleDefault)
 
-	drawString(offset(p.d, dW+1+barCompleteW+1, 1), -1,
-		strings.Repeat(" ", barW-barCompleteW-1), tcell.StyleDefault)
+		drawString(offset(p.d, dW+1+barCompleteW+1, 1), -1,
+			strings.Repeat(" ", barW-barCompleteW-1), tcell.StyleDefault)
+	}
 
 	p.d(p.w-dW-1, 1, '|', tcell.StyleDefault)
 	drawString(offset(p.d, p.w-dW, 1), -1, totalS, tcell.StyleDefault)
@@ -194,13 +196,36 @@ func (p *ProgressDrawer) CancelProgressDrawers() {
 	}
 }
 
-func (p *ProgressDrawer) Draw() error {
-	clear(p.d, p.w, 3)
+func (p *ProgressDrawer) DrawWarning() {
+	clear(offset(p.d, 0, 2), p.w, 1)
 
+	if *p.Warning == nil {
+		return
+	}
+
+	warningString := (*p.Warning).Error()
+	warningLen := len(warningString)
+
+	style := tcell.StyleDefault.Background(tcell.ColorRed).Foreground(tcell.ColorBlack)
+
+	if warningLen > p.w {
+		drawString(offset(p.d, 0, 2), p.w, warningString, style)
+		return
+	}
+
+	drawString(offset(p.d, p.w-warningLen, 2), -1, warningString, style)
+}
+
+func (p *ProgressDrawer) Draw() error {
+	// pause/shuffle/repeat drawers don't clear the top row, so we need to do
+	// it here
+	clear(p.d, p.w, 1)
 	p.DrawPause()
 	p.DrawShuffle()
 	p.DrawRepeat()
+
 	p.DrawBar()
+	p.DrawWarning()
 
 	return nil
 }

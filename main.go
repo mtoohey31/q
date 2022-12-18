@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -52,27 +51,41 @@ func main() {
 	parser := kong.Must(&flags, kong.TypeMapper(
 		reflect.TypeOf(types.RepeatNone), types.RepeatMapper{}))
 
+	// from here on out, we use this same error variable for the current error,
+	// and we call return if it is non-nil. by doing this, we allow future
+	// defers with resource cleanups (such as closing the speaker and restoring
+	// the screen) to be run before the exit happens
+
+	var err error
+	defer func() {
+		parser.FatalIfErrorf(err)
+	}()
+
 	cfgArgs, err := loadConfig()
-	parser.FatalIfErrorf(err)
+	if err != nil {
+		return
+	}
 
 	_, err = parser.Parse(append(cfgArgs, os.Args[1:]...))
-	parser.FatalIfErrorf(err)
+	if err != nil {
+		return
+	}
 
 	app, err := newApp(flags)
 	if err != nil {
-		log.Fatalln(err)
+		return
 	}
-	defer app.close()
+	defer app.screen.Fini()
 
-	err = speaker.Init(app.sampleRate, app.sampleRate.N(time.Millisecond*5))
+	err = speaker.Init(app.sampleRate, app.sampleRate.N(time.Millisecond*10))
 	if err != nil {
-		log.Fatalln(err)
+		return
 	}
 	defer speaker.Close()
 
 	speaker.Play(app)
 
-	if err := app.loop(); err != nil {
-		log.Fatalln(err)
+	if err = app.loop(); err != nil {
+		return
 	}
 }
