@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+	"unicode/utf8"
 
 	"mtoohey.com/q/internal/draw"
+	"mtoohey.com/q/internal/query"
 	"mtoohey.com/q/internal/track"
 	"mtoohey.com/q/internal/types"
 
@@ -17,6 +19,7 @@ import (
 const (
 	metadataIdx int = iota
 	lyricsIdx
+	searchIdx
 )
 
 type app struct {
@@ -30,9 +33,10 @@ type app struct {
 	// value is the index within the queue of the first song that has already
 	// been played on this repetition
 	shuffleIdx    *int
-	queueFocusIdx int
-	queue         []*track.Track
 	clipboard     *track.Track
+	queue         []*track.Track
+	queueFocusIdx int
+	typing        bool
 	warning       error
 
 	// drawers
@@ -40,6 +44,7 @@ type app struct {
 	queueDrawer, bottomDrawer draw.Drawer
 	coverDrawer               draw.DynWDrawClearer
 	switchableDrawer          *draw.SwitchableDrawer
+	searchDrawer              *draw.SearchDrawer
 	progressDrawer            *draw.ProgressDrawer
 
 	// external resources
@@ -139,18 +144,18 @@ func newApp(options appOptions) (a *app, err error) {
 	}
 
 	pathSet := map[string]struct{}{}
-	for _, query := range options.InitialQueries {
-		paths, err := Query(options.MusicDir, query)
+	paths := []string{}
+	for _, q := range options.InitialQueries {
+		newPaths, err := query.Query(options.MusicDir, q)
 		if err != nil {
-			return nil, fmt.Errorf(`failed to execute query "%s": %w`, query, err)
+			return nil, fmt.Errorf(`failed to execute query "%s": %w`, q, err)
 		}
-		for _, p := range paths {
-			pathSet[p] = struct{}{}
+		for _, p := range newPaths {
+			if _, ok := pathSet[p]; !ok {
+				paths = append(paths, p)
+				pathSet[p] = struct{}{}
+			}
 		}
-	}
-	paths := make([]string, 0, len(pathSet))
-	for path := range pathSet {
-		paths = append(paths, path)
 	}
 
 	if options.Shuffle {
@@ -208,11 +213,16 @@ func newApp(options appOptions) (a *app, err error) {
 		},
 	}
 
+	a.searchDrawer = &draw.SearchDrawer{
+		Screen:   a.screen,
+		MusicDir: options.MusicDir,
+	}
+
 	a.switchableDrawer = &draw.SwitchableDrawer{
 		Drawers: []draw.Drawer{
 			metadataIdx: &draw.MetadataDrawer{Queue: &a.queue},
 			lyricsIdx:   &draw.LyricsDrawer{Queue: &a.queue},
-			// TODO: search
+			searchIdx:   a.searchDrawer,
 			// TODO: visualizer
 		},
 	}
@@ -286,18 +296,58 @@ func (a *app) loop() error {
 				a.seekBy(time.Second * 5)
 
 			case tcell.KeyDown:
-				a.queueFocusShift(1)
+				if a.typing {
+					a.fatalfIf(a.searchDrawer.ShiftFocus(1), "search shift focus failed")
+				} else {
+					a.queueFocusShift(1)
+				}
 
 			case tcell.KeyUp:
-				a.queueFocusShift(-1)
+				if a.typing {
+					a.fatalfIf(a.searchDrawer.ShiftFocus(-1), "search shift focus failed")
+				} else {
+					a.queueFocusShift(-1)
+				}
 
 			case tcell.KeyEnter:
-				a.jumpFocused()
+				if a.typing {
+					if res := a.searchDrawer.FocusedResult(); res != "" {
+						a.queue = append(a.queue, &track.Track{Path: res})
+						if len(a.queue) == 1 {
+							a.playQueueTop()
+							if a.paused {
+								a.paused = false
+							}
+							a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+							a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
+						}
+						a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+					}
+				} else {
+					a.jumpFocused()
+				}
 
 			case tcell.KeyTAB:
-				a.fatalfIf(a.switchableDrawer.Cycle(), "cycle failed")
+				idx, err := a.switchableDrawer.Cycle()
+				a.fatalfIf(err, "cycle failed")
+				a.typing = idx == searchIdx
+
+			case tcell.KeyBackspace2:
+				if !a.typing {
+					break
+				}
+				_, n := utf8.DecodeLastRune(a.searchDrawer.Bytes())
+				a.searchDrawer.Truncate(a.searchDrawer.Len() - n)
+				a.fatalfIf(a.searchDrawer.Draw(), "search draw failed")
 
 			case tcell.KeyRune:
+				if a.typing {
+					_, err := a.searchDrawer.WriteRune(ev.Rune())
+					a.fatalfIf(err, "search write rune failed")
+					a.fatalfIf(a.searchDrawer.Draw(), "search draw failed")
+					break
+				}
+
 				switch ev.Rune() {
 				case ' ':
 					a.cyclePause()
@@ -383,6 +433,7 @@ func (a *app) paste(before bool) {
 		a.playQueueTop()
 		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
 		a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(lyricsIdx), "lyrics draw failed")
 	}
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 }
@@ -404,6 +455,7 @@ func (a *app) removeFocused() {
 		a.playQueueTop()
 		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
 		a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(lyricsIdx), "lyrics draw failed")
 	}
 
 	if a.queueFocusIdx >= len(a.queue) {
@@ -464,6 +516,7 @@ func (a *app) jumpFocused() {
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
 	a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(lyricsIdx), "lyrics draw failed")
 }
 
 func (a *app) cyclePause() {
@@ -556,8 +609,13 @@ func (a *app) skipLocked(r types.Repeat) {
 		if a.shuffleIdx == nil {
 			a.queue = append(a.queue[1:], a.queue[0])
 		} else {
+			// we've played through the whole thing once, reset
+			if *a.shuffleIdx == 0 {
+				*a.shuffleIdx = len(a.queue)
+			}
+
 			var r int
-			if *a.shuffleIdx == 1 {
+			if *a.shuffleIdx == 1 && len(a.queue) > 2 {
 				// special case: we don't want to move the current track to the
 				// start again and play it twice in a row
 				r = *a.shuffleIdx + 1 + rand.Intn(len(a.queue)-*a.shuffleIdx)
@@ -566,10 +624,6 @@ func (a *app) skipLocked(r types.Repeat) {
 			}
 			a.queue = append(a.queue[1:r], append([]*track.Track{a.queue[0]}, a.queue[r:]...)...)
 			*a.shuffleIdx--
-			// we've played through the whole thing once, reset
-			if *a.shuffleIdx == 0 {
-				*a.shuffleIdx = len(a.queue)
-			}
 		}
 	}
 
@@ -578,6 +632,7 @@ func (a *app) skipLocked(r types.Repeat) {
 	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
 	a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(lyricsIdx), "lyrics draw failed")
 }
 
 // callers are required to verify that queue[0] exists

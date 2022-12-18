@@ -7,9 +7,16 @@ type SwitchableDrawer struct {
 	scope
 }
 
-func (s *SwitchableDrawer) Cycle() error {
+func (s *SwitchableDrawer) Cycle() (int, error) {
+	if len(s.Drawers) > 1 {
+		if clearer, ok := s.Drawers[s.idx].(Clearer); ok {
+			if err := clearer.Clear(); err != nil {
+				return 0, err
+			}
+		}
+	}
 	s.idx = (s.idx + 1) % len(s.Drawers)
-	return s.Draw()
+	return s.idx, s.Draw()
 }
 
 func (s *SwitchableDrawer) Draw() error {

@@ -17,9 +17,19 @@ type SetScoper interface {
 	SetScope(d drawFunc, w, h int)
 }
 
+type Clearer interface {
+	// Clear clears the previous draw.
+	Clear() error
+}
+
 type DrawSetScoper interface {
 	Drawer
 	SetScoper
+}
+
+type DrawClearer interface {
+	Drawer
+	Clearer
 }
 
 // DynWDrawer draws to the screen, taking up a fixed height but variable width.
@@ -34,9 +44,7 @@ type DynWDrawer interface {
 // width. It can also be cleared.
 type DynWDrawClearer interface {
 	DynWDrawer
-
-	// Clear clears the previous draw.
-	Clear() error
+	Clearer
 }
 
 var _ DynWDrawer = DynWDrawClearer(nil)
