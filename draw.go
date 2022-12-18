@@ -18,9 +18,6 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-// TODO: figure out a better system then caching previous values of drawers and
-// heights and widths cause that's ugly
-
 type drawFunc func(x, y int, r rune, s tcell.Style)
 
 // offset returns a new drawFunc final based on prev that is offset by xOff and
@@ -67,10 +64,24 @@ func drawString(d drawFunc, maxW int, s string, style tcell.Style) int {
 
 // drawer draws to the screen, taking up a fixed box.
 type drawer interface {
-	// draw fills the box from x value 0..w and y value 0..h
-	// (both non-inclusive) by calling d. It must fill the entire box, the
-	// caller makes no guarantees about the prior contents.
-	draw(d drawFunc, w, h int) error
+	// setScope sets the scope of this drawer to be the box from x=0..w and
+	// y=0..h (both non-inclusive), which should be filled using d.
+	setScope(d drawFunc, w, h int)
+
+	// draw fills the box specified by setScope. It must fill the entire box,
+	// since no guarantees are made about the box's prior contents.
+	draw() error
+}
+
+type scope struct {
+	d    drawFunc
+	w, h int
+}
+
+func (s *scope) setScope(d drawFunc, w, h int) {
+	s.d = d
+	s.w = w
+	s.h = h
 }
 
 // horizRatioSplitDrawer draws left and right next to each other, along with
@@ -80,50 +91,56 @@ type drawer interface {
 // with knowledge of where the horizontal split is since there is a joining '┴'
 // in the bottom line.
 type horizRatioSplitDrawer struct {
+	scope
 	ratio       float32
 	left, right drawer
 }
 
-func (hrs *horizRatioSplitDrawer) draw(d drawFunc, w, h int) error {
-	leftW := int(float32(w) * hrs.ratio)
+func (hrs *horizRatioSplitDrawer) draw() error {
+	leftW := int(float32(hrs.w) * hrs.ratio)
 	// h-1 leaves space for the horizontal line
-	if err := hrs.left.draw(d, leftW, h-1); err != nil {
+	hrs.left.setScope(hrs.d, leftW, hrs.h-1)
+	if err := hrs.left.draw(); err != nil {
 		return err
 	}
 
 	// draw line
-	for y := 0; y < h-1; y++ {
-		d(leftW, y, '│', tcell.StyleDefault)
+	for y := 0; y < hrs.h-1; y++ {
+		hrs.d(leftW, y, '│', tcell.StyleDefault)
 	}
-	for x := 0; x < w; x++ {
+	for x := 0; x < hrs.w; x++ {
 		if x == leftW {
 			continue
 		}
 
-		d(x, h-1, '─', tcell.StyleDefault)
+		hrs.d(x, hrs.h-1, '─', tcell.StyleDefault)
 	}
-	d(leftW, h-1, '┴', tcell.StyleDefault)
+	hrs.d(leftW, hrs.h-1, '┴', tcell.StyleDefault)
 
 	rightX := leftW + 1 // leave space for vertical line
-	rightW := w - rightX
-	return hrs.right.draw(offset(d, rightX, 0), rightW, h-1)
+	rightW := hrs.w - rightX
+	hrs.right.setScope(offset(hrs.d, rightX, 0), rightW, hrs.h-1)
+	return hrs.right.draw()
 }
 
 // verticalFixedBottomSplitDrawer draws top and bottom respectively above and
 // below each other, providing bottom with a height of bottomH and top with
 // the remaining vertical space. It draws no lines.
 type verticalFixedBottomSplitDrawer struct {
+	scope
 	bottomH     int
 	top, bottom drawer
 }
 
-func (vfbs *verticalFixedBottomSplitDrawer) draw(d drawFunc, w, h int) error {
-	topH := h - vfbs.bottomH
-	if err := vfbs.top.draw(d, w, topH); err != nil {
+func (vfbs *verticalFixedBottomSplitDrawer) draw() error {
+	topH := vfbs.h - vfbs.bottomH
+	vfbs.top.setScope(vfbs.d, vfbs.w, topH)
+	if err := vfbs.top.draw(); err != nil {
 		return err
 	}
 
-	return vfbs.bottom.draw(offset(d, 0, topH), w, vfbs.bottomH)
+	vfbs.bottom.setScope(offset(vfbs.d, 0, topH), vfbs.w, vfbs.bottomH)
+	return vfbs.bottom.draw()
 }
 
 // drawer draws to the screen, taking up a fixed height but variable width.
@@ -220,35 +237,38 @@ func (c *coverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 // horizDynLimitRatioSplitDrawer first draws left will maxW set to w*ratio,
 // then draws right in whatever the remaining space is.
 type horizDynLimitRatioSplitDrawer struct {
+	scope
 	ratio      float32
 	lastRightX *int
 	left       dynWDrawer
 	right      drawer
 }
 
-func (hdlrs *horizDynLimitRatioSplitDrawer) draw(d drawFunc, w, h int) error {
-	leftMaxW := int(float32(w) * hdlrs.ratio)
-	leftW, err := hdlrs.left.dynWDraw(d, leftMaxW, h)
+func (hdlrs *horizDynLimitRatioSplitDrawer) draw() error {
+	leftMaxW := int(float32(hdlrs.w) * hdlrs.ratio)
+	leftW, err := hdlrs.left.dynWDraw(hdlrs.d, leftMaxW, hdlrs.h)
 	if err != nil {
 		return err
 	}
 
-	for y := 0; y < h; y++ {
-		d(leftW, y, ' ', tcell.StyleDefault)
+	for y := 0; y < hdlrs.h; y++ {
+		hdlrs.d(leftW, y, ' ', tcell.StyleDefault)
 	}
 
 	rightX := leftW + 1
 	hdlrs.lastRightX = &rightX
-	return hdlrs.right.draw(offset(d, rightX, 0), w-rightX, h)
+	hdlrs.right.setScope(offset(hdlrs.d, rightX, 0), hdlrs.w-rightX, hdlrs.h)
+	return hdlrs.right.draw()
 }
 
 // fillDrawer fills its whole box with r.
 type fillDrawer struct {
+	scope
 	r rune
 }
 
-func (f *fillDrawer) draw(d drawFunc, w, h int) error {
-	fill(d, w, h, f.r)
+func (f *fillDrawer) draw() error {
+	fill(f.d, f.w, f.h, f.r)
 
 	return nil
 }
@@ -260,35 +280,24 @@ func (f *fillDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 }
 
 type queueDrawer struct {
+	scope
+
 	queue         *[]*track.Track
 	queueFocusIdx *int
-
-	prevD        drawFunc
-	prevW, prevH *int
 }
 
-func (q *queueDrawer) draw(d drawFunc, w, h int) error {
-	q.prevD = d
-	q.prevW = &w
-	q.prevH = &h
-
-	return q.drawPrev()
-}
-
-func (q *queueDrawer) drawPrev() error {
-	d, w, h := q.prevD, *q.prevW, *q.prevH
-
+func (q *queueDrawer) draw() error {
 	if len(*q.queue) == 0 {
 		s := "queue empty"
-		textX := h / 2
-		clear(d, w, textX)
-		drawString(offset(d, (w-len(s))/2, textX), w, s, tcell.StyleDefault.
+		textX := q.h / 2
+		clear(q.d, q.w, textX)
+		drawString(offset(q.d, (q.w-len(s))/2, textX), q.w, s, tcell.StyleDefault.
 			Dim(true).Italic(true).Foreground(tcell.ColorGray))
-		clear(offset(d, 0, textX+1), w, h-textX-1)
+		clear(offset(q.d, 0, textX+1), q.w, q.h-textX-1)
 	}
 
 	y := 0
-	for ; y < h && y < len(*q.queue); y++ {
+	for ; y < q.h && y < len(*q.queue); y++ {
 		description, err := (*q.queue)[y].Description()
 		if err != nil {
 			return fmt.Errorf("failed to get description of queue[%d]: %w", y, err)
@@ -298,13 +307,13 @@ func (q *queueDrawer) drawPrev() error {
 		if y == *q.queueFocusIdx {
 			style = style.Background(tcell.ColorAqua).Foreground(tcell.ColorBlack)
 		}
-		d(0, y, ' ', style)
-		x := drawString(offset(d, 1, y), w-2, description, style)
-		for x++; x < w; x++ {
-			d(x, y, ' ', style)
+		q.d(0, y, ' ', style)
+		x := drawString(offset(q.d, 1, y), q.w-2, description, style)
+		for x++; x < q.w; x++ {
+			q.d(x, y, ' ', style)
 		}
 	}
-	clear(offset(d, 0, y), w, h-y)
+	clear(offset(q.d, 0, y), q.w, q.h-y)
 
 	return nil
 }
@@ -350,6 +359,8 @@ type runeStylePair struct {
 
 // progress draw assumes h is always 3
 type progressDrawer struct {
+	scope
+
 	streamSeekCloser *beep.StreamSeekCloser
 	format           *beep.Format
 	// TODO: consider wrapping these in a state struct or something
@@ -361,11 +372,7 @@ type progressDrawer struct {
 	repeatRSMap map[repeat]runeStylePair
 	shuffleR    rune
 
-	prevDrawer drawFunc
-	prevW      *int
-
-	cancelBarDrawer  chan struct{}
-	cancelTimeDrawer chan struct{}
+	cancelDrawers chan struct{}
 }
 
 func newProgressDrawer(canDisplay func(rune) bool) *progressDrawer {
@@ -399,35 +406,23 @@ func newProgressDrawer(canDisplay func(rune) bool) *progressDrawer {
 }
 
 func (p *progressDrawer) drawPause() {
-	if p.prevDrawer == nil {
-		return
-	}
-
 	s := tcell.StyleDefault
 	if *p.paused || *p.streamSeekCloser == nil {
 		s = s.Dim(true)
 	}
-	p.prevDrawer((*p.prevW)/2, 0, p.pausedRMap[*p.paused], s)
+	p.scope.d((p.scope.w)/2, 0, p.pausedRMap[*p.paused], s)
 }
 
 func (p *progressDrawer) drawRepeat() {
-	if p.prevDrawer == nil {
-		return
-	}
-
-	p.prevDrawer((*p.prevW)/2+5, 0, p.repeatRSMap[*p.repeat].r, p.repeatRSMap[*p.repeat].s)
+	p.scope.d(p.scope.w/2+5, 0, p.repeatRSMap[*p.repeat].r, p.repeatRSMap[*p.repeat].s)
 }
 
 func (p *progressDrawer) drawShuffle() {
-	if p.prevDrawer == nil {
-		return
-	}
-
 	s := tcell.StyleDefault
 	if *p.shuffleIdx == nil {
 		s = s.Dim(true)
 	}
-	p.prevDrawer((*p.prevW)/2-5, 0, p.shuffleR, s)
+	p.scope.d(p.scope.w/2-5, 0, p.shuffleR, s)
 }
 
 func (p *progressDrawer) widths() (dW, barW int) {
@@ -456,11 +451,11 @@ func (p *progressDrawer) widths() (dW, barW int) {
 		dW += int(math.Floor(math.Log10(float64(totalD/time.Hour)))) + 2
 	}
 
-	return dW, (*p.prevW) - (2*dW + 2)
+	return dW, p.scope.w - (2*dW + 2)
 }
 
 func (p *progressDrawer) drawBar() {
-	if *p.streamSeekCloser == nil || p.prevDrawer == nil {
+	if *p.streamSeekCloser == nil {
 		return
 	}
 
@@ -473,41 +468,38 @@ func (p *progressDrawer) drawBar() {
 	currS = strings.Repeat(" ", dW-len(currS)) + currS
 	totalS = strings.Repeat(" ", dW-len(totalS)) + totalS
 
-	drawString(offset(p.prevDrawer, 0, 1), -1, currS, tcell.StyleDefault)
-	p.prevDrawer(dW, 1, '|', tcell.StyleDefault)
+	drawString(offset(p.scope.d, 0, 1), -1, currS, tcell.StyleDefault)
+	p.scope.d(dW, 1, '|', tcell.StyleDefault)
 
 	progress := float64(currD) / float64(totalD)
 	barCompleteW := int(progress * float64(barW))
-	drawString(offset(p.prevDrawer, dW+1, 1), -1, strings.Repeat("█", barCompleteW), tcell.StyleDefault)
+	drawString(offset(p.scope.d, dW+1, 1), -1, strings.Repeat("█", barCompleteW), tcell.StyleDefault)
 
 	// the fractional part of a box not drawn, should be between 0 and 1
 	remainder := progress*float64(barW) - float64(barCompleteW)
 	partialBoxes := [8]rune{' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'}
-	p.prevDrawer(dW+1+barCompleteW, 1, partialBoxes[int(remainder*8)], tcell.StyleDefault)
+	p.scope.d(dW+1+barCompleteW, 1, partialBoxes[int(remainder*8)], tcell.StyleDefault)
 
-	drawString(offset(p.prevDrawer, dW+1+barCompleteW+1, 1), -1,
+	drawString(offset(p.d, dW+1+barCompleteW+1, 1), -1,
 		strings.Repeat(" ", barW-barCompleteW-1), tcell.StyleDefault)
 
-	p.prevDrawer(*p.prevW-dW-1, 1, '|', tcell.StyleDefault)
-	drawString(offset(p.prevDrawer, *p.prevW-dW, 1), -1, totalS, tcell.StyleDefault)
+	p.d(p.w-dW-1, 1, '|', tcell.StyleDefault)
+	drawString(offset(p.d, p.w-dW, 1), -1, totalS, tcell.StyleDefault)
 }
 
 func (p *progressDrawer) spawnProgressDrawers(show func()) {
-	if p.cancelBarDrawer != nil {
+	if p.cancelDrawers != nil {
 		// drawer already running
 		return
 	}
 
-	p.cancelBarDrawer = make(chan struct{})
-	p.cancelTimeDrawer = make(chan struct{})
+	p.cancelDrawers = make(chan struct{})
 
 	// bar drawer
 	go func() {
 		for {
-			if p.prevW != nil {
-				p.drawBar()
-				show()
-			}
+			p.drawBar()
+			show()
 
 			// the time it takes to draw one fractional section of the bar
 			_, barW := p.widths()
@@ -515,7 +507,7 @@ func (p *progressDrawer) spawnProgressDrawers(show func()) {
 
 			select {
 			case <-time.After(redrawTime):
-			case <-p.cancelBarDrawer:
+			case <-p.cancelDrawers:
 				return
 			}
 		}
@@ -524,14 +516,12 @@ func (p *progressDrawer) spawnProgressDrawers(show func()) {
 	// time drawer
 	go func() {
 		for {
-			if p.prevW != nil {
-				p.drawBar()
-				show()
-			}
+			p.drawBar()
+			show()
 
 			select {
 			case <-time.After(time.Second):
-			case <-p.cancelTimeDrawer:
+			case <-p.cancelDrawers:
 				return
 			}
 		}
@@ -539,21 +529,14 @@ func (p *progressDrawer) spawnProgressDrawers(show func()) {
 }
 
 func (p *progressDrawer) cancelProgressDrawers() {
-	if p.cancelBarDrawer != nil {
-		close(p.cancelBarDrawer)
-		p.cancelBarDrawer = nil
-	}
-	if p.cancelTimeDrawer != nil {
-		close(p.cancelTimeDrawer)
-		p.cancelTimeDrawer = nil
+	if p.cancelDrawers != nil {
+		close(p.cancelDrawers)
+		p.cancelDrawers = nil
 	}
 }
 
-func (p *progressDrawer) draw(d drawFunc, w, _ int) error {
-	p.prevDrawer = d
-	p.prevW = &w
-
-	clear(d, w, 3)
+func (p *progressDrawer) draw() error {
+	clear(p.d, p.w, 3)
 
 	p.drawPause()
 	p.drawShuffle()

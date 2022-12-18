@@ -31,6 +31,7 @@ type app struct {
 	progressDrawer *progressDrawer
 	coverDrawer    *coverDynWDrawer
 	queueDrawer    *queueDrawer
+	bottomDrawer   *horizDynLimitRatioSplitDrawer
 
 	// external resources
 	streamer         beep.Streamer
@@ -137,22 +138,24 @@ func newApp(options appOptions) (*app, error) {
 		queueFocusIdx: &a.queueFocusIdx,
 	}
 
+	a.bottomDrawer = &horizDynLimitRatioSplitDrawer{
+		ratio: 1.0 / 4,
+		left:  a.coverDrawer,
+		right: &horizDynLimitRatioSplitDrawer{
+			ratio: 1.0 / 3,
+			left:  &infoDynWDrawer{&a.queue},
+			right: a.progressDrawer,
+		},
+	}
+
 	a.rootDrawer = &verticalFixedBottomSplitDrawer{
 		bottomH: 3,
 		top: &horizRatioSplitDrawer{
 			ratio: 1.0 / 3,
 			left:  a.queueDrawer,
-			right: &fillDrawer{' '}, // TODO: switchable between lyrics, visualizer, full metadata, search
+			right: &fillDrawer{r: ' '}, // TODO: switchable between lyrics, visualizer, full metadata, search
 		},
-		bottom: &horizDynLimitRatioSplitDrawer{
-			ratio: 1.0 / 4,
-			left:  a.coverDrawer,
-			right: &horizDynLimitRatioSplitDrawer{
-				ratio: 1.0 / 3,
-				left:  &infoDynWDrawer{&a.queue},
-				right: a.progressDrawer,
-			},
-		},
+		bottom: a.bottomDrawer,
 	}
 
 	return a, nil
@@ -160,9 +163,10 @@ func newApp(options appOptions) (*app, error) {
 
 func (a *app) draw() {
 	w, h := a.screen.Size()
-	err := a.rootDrawer.draw(func(x, y int, r rune, s tcell.Style) {
+	a.rootDrawer.setScope(func(x, y int, r rune, s tcell.Style) {
 		a.screen.SetContent(x, y, r, nil, s)
 	}, w, h)
+	err := a.rootDrawer.draw()
 	if err != nil {
 		a.fatalf(err, "drawing failed")
 	}
@@ -264,7 +268,8 @@ func (a *app) queueFocusShift(i int) {
 	a.queueFocusIdx = newIdx
 
 	if i != 0 {
-		a.queueDrawer.drawPrev()
+		a.queueDrawer.draw()
+		a.screen.Show()
 	}
 }
 
@@ -277,14 +282,15 @@ func (a *app) removeFocused() {
 
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
-		// TODO: redraw bottom bar here
+		a.bottomDrawer.draw()
 	}
 
 	if a.queueFocusIdx >= len(a.queue) {
 		a.queueFocusIdx = len(a.queue) - 1
 	}
 
-	a.queueDrawer.drawPrev()
+	a.queueDrawer.draw()
+	a.screen.Show()
 }
 
 func (a *app) jumpFocused() {
@@ -320,8 +326,9 @@ func (a *app) jumpFocused() {
 	a.queueFocusIdx = 0
 
 	a.playQueueTop()
-	a.queueDrawer.drawPrev()
-	// TODO: draw bottom bar
+	a.queueDrawer.draw()
+	a.bottomDrawer.draw()
+	a.screen.Show()
 }
 
 func (a *app) cyclePause() {
@@ -377,7 +384,7 @@ func (a *app) reshuffle() {
 		shuffle(a.queue[*a.shuffleIdx:])
 	}
 
-	a.queueDrawer.drawPrev()
+	a.queueDrawer.draw()
 	a.screen.Show()
 }
 
@@ -429,12 +436,8 @@ func (a *app) skipLocked() {
 
 	a.playQueueTopLocked()
 
-	// TODO: only re-draw the queue and the stuff in the bottom bar
-	a.draw()
-	// a.queueDrawer.draw()
-	// a.coverDrawer.dynWDraw()
-	// a.progressDrawer.drawPause()
-	// a.progressDrawer.drawBar()
+	a.queueDrawer.draw()
+	a.bottomDrawer.draw()
 	a.screen.Show()
 }
 
