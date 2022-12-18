@@ -1,8 +1,3 @@
-# github.com/abema/go-mp4 v0.8.0
-## explicit; go 1.14
-github.com/abema/go-mp4
-github.com/abema/go-mp4/bitio
-github.com/abema/go-mp4/util
 # github.com/alecthomas/kong v0.7.1
 ## explicit; go 1.18
 github.com/alecthomas/kong
@@ -15,6 +10,8 @@ github.com/faiface/beep
 github.com/faiface/beep/flac
 github.com/faiface/beep/mp3
 github.com/faiface/beep/speaker
+github.com/faiface/beep/vorbis
+github.com/faiface/beep/wav
 # github.com/gdamore/encoding v1.0.0
 ## explicit; go 1.9
 github.com/gdamore/encoding
@@ -59,9 +56,6 @@ github.com/gdamore/tcell/v2/terminfo/x/xfce
 github.com/gdamore/tcell/v2/terminfo/x/xterm
 github.com/gdamore/tcell/v2/terminfo/x/xterm_kitty
 github.com/gdamore/tcell/v2/terminfo/x/xterm_termite
-# github.com/google/uuid v1.1.2
-## explicit
-github.com/google/uuid
 # github.com/hajimehoshi/go-mp3 v0.3.0
 ## explicit; go 1.14
 github.com/hajimehoshi/go-mp3
@@ -80,6 +74,12 @@ github.com/hajimehoshi/oto/internal/mux
 # github.com/icza/bitio v1.0.0
 ## explicit; go 1.13
 github.com/icza/bitio
+# github.com/jfreymuth/oggvorbis v1.0.1
+## explicit
+github.com/jfreymuth/oggvorbis
+# github.com/jfreymuth/vorbis v1.0.0
+## explicit
+github.com/jfreymuth/vorbis
 # github.com/lucasb-eyer/go-colorful v1.2.0
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful

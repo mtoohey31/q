@@ -15,8 +15,8 @@ import (
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/flac"
 	"github.com/faiface/beep/mp3"
-	// "github.com/faiface/beep/vorbis"
-	// "github.com/faiface/beep/wav"
+	"github.com/faiface/beep/vorbis"
+	"github.com/faiface/beep/wav"
 )
 
 // Track represents a song on the filesystem. This type must not be copied
@@ -138,13 +138,16 @@ func (t *Track) Cover() (image.Image, error) {
 }
 
 // Decode returns a beep.StreamSeekCloser and beep.Format for this track.
+//
+// It is the caller's responsibility to close the beep.StreamSeekCloser when
+// they are finished with it.
 func (t *Track) Decode() (beep.StreamSeekCloser, beep.Format, error) {
 	f, err := os.Open(t.Path)
 	if err != nil {
 		return nil, beep.Format{}, err
 	}
 
-	var magic [4]byte
+	var magic [12]byte
 	_, err = f.Read(magic[:])
 	if err != nil {
 		return nil, beep.Format{}, err
@@ -154,17 +157,26 @@ func (t *Track) Decode() (beep.StreamSeekCloser, beep.Format, error) {
 		return nil, beep.Format{}, err
 	}
 
-	if magic == [4]byte{0x66, 0x4C, 0x61, 0x43} {
+	if bytes.Compare(magic[:3], []byte("ID3")) == 0 ||
+		bytes.Compare(magic[:2], []byte{0xFF, 0xFB}) == 0 ||
+		bytes.Compare(magic[:2], []byte{0xFF, 0xF3}) == 0 ||
+		bytes.Compare(magic[:2], []byte{0xFF, 0xF2}) == 0 {
+		return mp3.Decode(f)
+	}
+
+	if bytes.Compare(magic[:4], []byte("fLaC")) == 0 {
 		// TODO: flac panics if you try to seek it after it hits EOF... this is
 		// inconsistent with the behaviour of mp3
 		return flac.Decode(f)
 	}
 
-	if bytes.Compare(magic[:3], []byte{0x49, 0x44, 0x33}) == 0 ||
-		bytes.Compare(magic[:2], []byte{0xFF, 0xFB}) == 0 ||
-		bytes.Compare(magic[:2], []byte{0xFF, 0xF3}) == 0 ||
-		bytes.Compare(magic[:2], []byte{0xFF, 0xF2}) == 0 {
-		return mp3.Decode(f)
+	if bytes.Compare(magic[:4], []byte("RIFF")) == 0 ||
+		bytes.Compare(magic[8:12], []byte("WAVE")) == 0 {
+		return wav.Decode(f)
+	}
+
+	if bytes.Compare(magic[:4], []byte("OggS")) == 0 {
+		return vorbis.Decode(f)
 	}
 
 	// TODO: support other formats, and return an error that can be handled on
