@@ -177,7 +177,7 @@ func (a *app) loop() error {
 			return fmt.Errorf("error event: %w", ev)
 
 		case *tcell.EventResize:
-			// TODO: redraw image on resize
+			a.coverDrawer.clear()
 			a.draw()
 			if !sawInitialResize {
 				sawInitialResize = true

@@ -98,3 +98,21 @@ func WriteImage(w io.Writer, m image.Image, r image.Rectangle) error {
 
 	return nil
 }
+
+// WriteImage clears all images by writing to w, using whatever protocol is
+// detected as supported by the current terminal.
+//
+// If no supported protocol is detected for the current terminal, the sentinel
+// error TerminalUnsupported is returned.
+func ClearImages(w io.Writer) error {
+	if strings.ToLower(os.Getenv("TERM")) != "xterm-kitty" {
+		return TerminalUnsupported
+	}
+
+	_, err := fmt.Fprint(w, "\x1b_Ga=d;\x1b\\")
+	if err != nil {
+		return fmt.Errorf("write failed: %w", err)
+	}
+
+	return nil
+}

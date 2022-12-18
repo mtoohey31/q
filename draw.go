@@ -153,6 +153,23 @@ type coverDynWDrawer struct {
 	prevW *int
 }
 
+func (c *coverDynWDrawer) clear() error {
+	err := termimage.ClearImages(os.Stdout)
+	if err != nil {
+		if errors.Is(err, termimage.TerminalUnsupported) {
+			return nil
+		}
+
+		return err
+	}
+
+	c.prevCover = nil
+	z := 0
+	c.prevW = &z
+
+	return nil
+}
+
 func (c *coverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 	if len(*c.queue) == 0 {
 		return -1, nil
@@ -164,10 +181,14 @@ func (c *coverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 	}
 
 	if cover == nil {
+		if err := c.clear(); err != nil {
+			return 0, err
+		}
+
 		return -1, nil
 	}
 
-	if cover == c.prevCover {
+	if cover != nil && cover == c.prevCover {
 		return *c.prevW, nil
 	}
 
@@ -175,12 +196,13 @@ func (c *coverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 	coverAspectRatio := float64(coverBounds.Dx()) / float64(coverBounds.Dy())
 	cellAspectRatio := 2.28
 	w = int(math.Round(float64(h) * coverAspectRatio * cellAspectRatio))
+	imageH := h
 	if w > maxW {
 		w = maxW
-		h = int(math.Round(float64(w) / coverAspectRatio / cellAspectRatio))
+		imageH = int(math.Round(float64(w) / coverAspectRatio / cellAspectRatio))
 	}
 
-	err = termimage.WriteImage(os.Stdout, cover, image.Rect(0, c.absHeight()-h, w, c.absHeight()))
+	err = termimage.WriteImage(os.Stdout, cover, image.Rect(0, c.absHeight()-h, w, c.absHeight()-h+imageH))
 	if err != nil {
 		if errors.Is(err, termimage.TerminalUnsupported) {
 			return -1, nil
@@ -188,6 +210,8 @@ func (c *coverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 
 		return 0, err
 	}
+
+	clear(d, w, h)
 
 	c.prevCover = cover
 	c.prevW = &w
