@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"time"
 
+	"mtoohey.com/q/internal/track"
+
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/speaker"
 	"github.com/gdamore/tcell/v2"
@@ -16,7 +18,7 @@ type app struct {
 
 	// internal state
 	paused        bool
-	queue         []*track
+	queue         []*track.Track
 	repeat        repeat
 	queueFocusIdx int
 	// if nil, shuffle is disabled; if non-nil, when repeat is enabled, the
@@ -102,9 +104,9 @@ func newApp(options appOptions) (*app, error) {
 		return nil, err
 	}
 
-	a.queue = make([]*track, len(options.Paths))
+	a.queue = make([]*track.Track, len(options.Paths))
 	for i, path := range options.Paths {
-		a.queue[i] = &track{Path: path}
+		a.queue[i] = &track.Track{Path: path}
 	}
 
 	if len(a.queue) > 0 {
@@ -418,7 +420,7 @@ func (a *app) skipLocked() {
 			} else {
 				r = *a.shuffleIdx + rand.Intn(len(a.queue)-*a.shuffleIdx+1)
 			}
-			a.queue = append(a.queue[1:r], append([]*track{a.queue[0]}, a.queue[r:]...)...)
+			a.queue = append(a.queue[1:r], append([]*track.Track{a.queue[0]}, a.queue[r:]...)...)
 			*a.shuffleIdx--
 			// we've played through the whole thing once, reset
 			if *a.shuffleIdx == 0 {
@@ -455,7 +457,7 @@ func (a *app) playQueueTopLocked() {
 
 	if len(a.queue) > 0 {
 		var err error
-		a.streamSeekCloser, a.format, err = a.queue[0].decode()
+		a.streamSeekCloser, a.format, err = a.queue[0].Decode()
 		if err != nil {
 			a.fatalf(err, "failed to decode queue[0]")
 			a.skipLocked()

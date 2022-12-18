@@ -1,4 +1,4 @@
-package main
+package track
 
 import (
 	"bytes"
@@ -19,22 +19,86 @@ import (
 	// "github.com/faiface/beep/wav"
 )
 
-// TODO: move this into a separate package
-
-// track must not be copied
-type track struct {
+// Track represents a song on the filesystem. This type must not be copied
+// after Title, Description, or Cover are accessed.
+type Track struct {
 	Path string
 
-	infoOnce       sync.Once
-	title, artist  string
-	descriptionErr error
+	infoOnce      sync.Once
+	title, artist string
+	infoErr       error
 
 	coverOnce sync.Once
 	cover     image.Image
 	coverErr  error
 }
 
-func (t *track) Cover() (image.Image, error) {
+func (t *Track) initInfo() {
+	t.infoOnce.Do(func() {
+		tag, err := id3v2.Open(t.Path, id3v2.Options{
+			Parse:       true,
+			ParseFrames: []string{"Title", "Artist"},
+		})
+		if err != nil {
+			t.infoErr = err
+			return
+		}
+
+		t.title, t.artist = tag.Title(), tag.Artist()
+
+		err = tag.Close()
+		if err != nil {
+			t.infoErr = err
+			return
+		}
+	})
+}
+
+// Description returns a short, friendly description of the track.
+func (t *Track) Description() (string, error) {
+	t.initInfo()
+	if t.infoErr != nil {
+		return "", t.infoErr
+	}
+
+	if t.title == "" {
+		return filepath.Base(t.Path), nil
+	}
+
+	if t.artist == "" {
+		return t.title, nil
+	}
+
+	return fmt.Sprintf("%s - %s", t.artist, t.title), nil
+}
+
+// Title returns the title of the track. The basename of the track's path may
+// be used if no title was found.
+func (t *Track) Title() (string, error) {
+	t.initInfo()
+	if t.infoErr != nil {
+		return "", t.infoErr
+	}
+
+	title := t.title
+	if title == "" {
+		return filepath.Base(t.Path), nil
+	}
+
+	return title, nil
+}
+
+// Artist returns the artist for the track. It may return "" if no artist was
+// found.
+func (t *Track) Artist() (string, error) {
+	t.initInfo()
+	return t.artist, t.infoErr
+}
+
+// Cover returns the cover image of this track, if it has one. This function
+// will return nil, nil if no error is encountered and the file does not have
+// a cover image.
+func (t *Track) Cover() (image.Image, error) {
 	t.coverOnce.Do(func() {
 		tag, err := id3v2.Open(t.Path, id3v2.Options{
 			Parse:       true,
@@ -73,38 +137,8 @@ func (t *track) Cover() (image.Image, error) {
 	return t.cover, t.coverErr
 }
 
-func (t *track) Description() (string, error) {
-	t.infoOnce.Do(func() {
-		tag, err := id3v2.Open(t.Path, id3v2.Options{
-			Parse:       true,
-			ParseFrames: []string{"Title", "Artist"},
-		})
-		if err != nil {
-			t.descriptionErr = err
-			return
-		}
-
-		t.title, t.artist = tag.Title(), tag.Artist()
-
-		err = tag.Close()
-		if err != nil {
-			t.descriptionErr = err
-			return
-		}
-	})
-
-	if t.descriptionErr != nil {
-		return "", t.descriptionErr
-	}
-
-	if t.title == "" {
-		return filepath.Base(t.Path), nil
-	}
-
-	return fmt.Sprintf("%s - %s", t.artist, t.title), nil
-}
-
-func (t *track) decode() (beep.StreamSeekCloser, beep.Format, error) {
+// Decode returns a beep.StreamSeekCloser and beep.Format for this track.
+func (t *Track) Decode() (beep.StreamSeekCloser, beep.Format, error) {
 	f, err := os.Open(t.Path)
 	if err != nil {
 		return nil, beep.Format{}, err
@@ -133,6 +167,7 @@ func (t *track) decode() (beep.StreamSeekCloser, beep.Format, error) {
 		return mp3.Decode(f)
 	}
 
-	// TODO: support other formats
+	// TODO: support other formats, and return an error that can be handled on
+	// the other end if we don't find a format we support.
 	return nil, beep.Format{}, fmt.Errorf("unsupported format with magic: %v", magic)
 }

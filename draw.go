@@ -6,15 +6,16 @@ import (
 	"image"
 	"math"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"mtoohey.com/q/internal/termimage"
+	"mtoohey.com/q/internal/track"
+
 	"github.com/faiface/beep"
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
-	"mtoohey.com/q/internal/termimage"
 )
 
 // TODO: figure out a better system then caching previous values of drawers and
@@ -141,7 +142,7 @@ type dynWDrawer interface {
 // position absolutely using absHeight then does math assuming it's in the
 // bottom left corner...
 type coverDynWDrawer struct {
-	queue *[]*track
+	queue *[]*track.Track
 
 	// absHeight fetch the full height of the screen
 	absHeight func() int
@@ -262,7 +263,7 @@ func (f *fillDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 }
 
 type queueDrawer struct {
-	queue         *[]*track
+	queue         *[]*track.Track
 	queueFocusIdx *int
 
 	prevD        drawFunc
@@ -312,7 +313,7 @@ func (q *queueDrawer) drawPrev() error {
 }
 
 type infoDynWDrawer struct {
-	queue *[]*track
+	queue *[]*track.Track
 }
 
 func (i *infoDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
@@ -320,17 +321,18 @@ func (i *infoDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 		return -1, nil
 	}
 
-	_, err = (*i.queue)[0].Description()
+	title, err := (*i.queue)[0].Title()
 	if err != nil {
-		return -1, fmt.Errorf("failed to get description of queue[0]: %w", err)
+		return -1, fmt.Errorf("failed to get title of queue[0]: %w", err)
 	}
 
-	title := (*i.queue)[0].title
-	if title == "" {
-		title = filepath.Base((*i.queue)[0].Path)
+	artist, err := (*i.queue)[0].Artist()
+	if err != nil {
+		return -1, fmt.Errorf("failed to get artist for queue[0]: %w", err)
 	}
+
 	tW := drawString(d, maxW, title, tcell.StyleDefault)
-	aW := drawString(offset(d, 0, 1), maxW, (*i.queue)[0].artist, tcell.StyleDefault.Dim(true))
+	aW := drawString(offset(d, 0, 1), maxW, artist, tcell.StyleDefault.Dim(true))
 
 	w = tW
 	if aW > w {
