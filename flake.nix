@@ -1,5 +1,5 @@
 {
-  description = "CHANGEME";
+  description = "q";
 
   inputs = {
     nixpkgs.url = "nixpkgs/nixpkgs-unstable";
@@ -16,10 +16,12 @@
 
   outputs = { self, nixpkgs, utils, errcheck-src, gow-src }: {
     overlays.default = final: _: {
-      CHANGEME = final.buildGoModule rec {
-        name = "CHANGEME";
+      q = final.buildGoModule rec {
+        name = "q";
         pname = name;
         src = ./.;
+        buildInputs = [ final.alsa-lib ];
+        nativeBuildInputs = [ final.pkg-config ];
         vendorSha256 = null;
       };
     };
@@ -43,7 +45,7 @@
         self.overlays.default
       ]; inherit system;
     }; {
-    packages.default = CHANGEME;
+    packages.default = q;
 
     devShells.default = mkShell {
       packages = [ go gopls gow errcheck revive pkg-config alsa-lib ];
