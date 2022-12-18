@@ -12,6 +12,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/faiface/beep/speaker"
+	"mtoohey.com/q/internal/types"
 )
 
 func loadConfig() ([]string, error) {
@@ -37,40 +38,10 @@ func loadConfig() ([]string, error) {
 	return strings.Fields(string(b)), nil
 }
 
-type repeat uint8
-
-const (
-	repeatNone repeat = iota
-	repeatQueue
-	repeatTrack
-)
-
-type repeatMapper struct{}
-
-func (rm repeatMapper) Decode(ctx *kong.DecodeContext, target reflect.Value) error {
-	var repeatString string
-	if err := ctx.Scan.PopValueInto("string", &repeatString); err != nil {
-		return err
-	}
-
-	switch repeatString {
-	case "none":
-		target.Set(reflect.ValueOf(repeatNone))
-	case "queue":
-		target.Set(reflect.ValueOf(repeatQueue))
-	case "track":
-		target.Set(reflect.ValueOf(repeatTrack))
-	default:
-		return fmt.Errorf(`must be one of "none","queue","track" but got "%s"`, repeatString)
-	}
-
-	return nil
-}
-
 type appOptions struct {
-	Shuffle    bool   `short:"s" negatable:"true" default:"true"`
-	Repeat     repeat `short:"r" default:"queue"`
-	SampleRate uint   `short:"t" default:"44100"`
+	Shuffle    bool         `short:"s" negatable:"true" default:"true"`
+	Repeat     types.Repeat `short:"r" default:"queue"`
+	SampleRate uint         `short:"t" default:"44100"`
 
 	// TODO: remove this once I rework stuff
 	Paths []string `arg:"" type:"path" optional:"true"`
@@ -78,7 +49,8 @@ type appOptions struct {
 
 func main() {
 	var flags appOptions
-	parser := kong.Must(&flags, kong.TypeMapper(reflect.TypeOf(repeatNone), repeatMapper{}))
+	parser := kong.Must(&flags, kong.TypeMapper(
+		reflect.TypeOf(types.RepeatNone), types.RepeatMapper{}))
 
 	cfgArgs, err := loadConfig()
 	parser.FatalIfErrorf(err)

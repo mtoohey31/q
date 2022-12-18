@@ -5,7 +5,9 @@ import (
 	"math/rand"
 	"time"
 
+	"mtoohey.com/q/internal/draw"
 	"mtoohey.com/q/internal/track"
+	"mtoohey.com/q/internal/types"
 
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/speaker"
@@ -19,7 +21,7 @@ type app struct {
 	// internal state
 	paused        bool
 	queue         []*track.Track
-	repeat        repeat
+	repeat        types.Repeat
 	queueFocusIdx int
 	// if nil, shuffle is disabled; if non-nil, when repeat is enabled, the
 	// value is the index within the queue of the first song that has already
@@ -27,11 +29,10 @@ type app struct {
 	shuffleIdx *int
 
 	// drawers
-	rootDrawer     drawer
-	progressDrawer *progressDrawer
-	coverDrawer    *coverDynWDrawer
-	queueDrawer    *queueDrawer
-	bottomDrawer   *horizDynLimitRatioSplitDrawer
+	rootDrawer                draw.DrawSetScoper
+	queueDrawer, bottomDrawer draw.Drawer
+	coverDrawer               draw.DynWDrawClearer
+	progressDrawer            *draw.ProgressDrawer
 
 	// external resources
 	streamer         beep.Streamer
@@ -116,66 +117,54 @@ func newApp(options appOptions) (*app, error) {
 		a.playQueueTopLocked()
 	}
 
-	a.progressDrawer = newProgressDrawer(func(r rune) bool {
+	a.progressDrawer = draw.NewProgressDrawer(func(r rune) bool {
 		return a.screen.CanDisplay(r, false)
 	})
-	a.progressDrawer.streamSeekCloser = &a.streamSeekCloser
-	a.progressDrawer.format = &a.format
-	a.progressDrawer.paused = &a.paused
-	a.progressDrawer.repeat = &a.repeat
-	a.progressDrawer.shuffleIdx = &a.shuffleIdx
+	a.progressDrawer.StreamSeekCloser = &a.streamSeekCloser
+	a.progressDrawer.Format = &a.format
+	a.progressDrawer.Paused = &a.paused
+	a.progressDrawer.Repeat = &a.repeat
+	a.progressDrawer.ShuffleIdx = &a.shuffleIdx
 
-	a.coverDrawer = &coverDynWDrawer{
-		queue: &a.queue,
-		absHeight: func() int {
+	a.queueDrawer = &draw.QueueDrawer{
+		Queue:         &a.queue,
+		QueueFocusIdx: &a.queueFocusIdx,
+	}
+
+	a.coverDrawer = &draw.CoverDynWDrawer{
+		Queue: &a.queue,
+		AbsHeight: func() int {
 			_, h := a.screen.Size()
 			return h
 		},
 	}
 
-	a.queueDrawer = &queueDrawer{
-		queue:         &a.queue,
-		queueFocusIdx: &a.queueFocusIdx,
-	}
-
-	a.bottomDrawer = &horizDynLimitRatioSplitDrawer{
-		ratio: 1.0 / 4,
-		left:  a.coverDrawer,
-		right: &horizDynLimitRatioSplitDrawer{
-			ratio: 1.0 / 3,
-			left:  &infoDynWDrawer{&a.queue},
-			right: a.progressDrawer,
+	a.bottomDrawer = &draw.HorizDynLimitRatioSplitDrawer{
+		Ratio: 1.0 / 4,
+		Left:  a.coverDrawer,
+		Right: &draw.HorizDynLimitRatioSplitDrawer{
+			Ratio: 1.0 / 3,
+			Left:  &draw.InfoDynWDrawer{Queue: &a.queue},
+			Right: a.progressDrawer,
 		},
 	}
 
-	a.rootDrawer = &verticalFixedBottomSplitDrawer{
-		bottomH: 3,
-		top: &horizRatioSplitDrawer{
-			ratio: 1.0 / 3,
-			left:  a.queueDrawer,
-			right: &fillDrawer{r: ' '}, // TODO: switchable between lyrics, visualizer, full metadata, search
+	a.rootDrawer = &draw.VertFixedBotSplitDrawer{
+		BottomH: 3,
+		Top: &draw.HorizRatioSplitDrawer{
+			Ratio: 1.0 / 3,
+			Left:  a.queueDrawer,
+			Right: &draw.FillDrawer{R: ' '}, // TODO: switchable between lyrics, visualizer, full metadata, search
 		},
-		bottom: a.bottomDrawer,
+		Bottom: a.bottomDrawer,
 	}
 
 	return a, nil
 }
 
-func (a *app) draw() {
-	w, h := a.screen.Size()
-	a.rootDrawer.setScope(func(x, y int, r rune, s tcell.Style) {
-		a.screen.SetContent(x, y, r, nil, s)
-	}, w, h)
-	err := a.rootDrawer.draw()
-	if err != nil {
-		a.fatalf(err, "drawing failed")
-	}
-}
-
 func (a *app) loop() error {
 	// we don't draw to start, because we get a resize event on startup, which
 	// causes the first draw
-	sawInitialResize := false
 
 	for {
 		switch ev := a.screen.PollEvent().(type) {
@@ -183,11 +172,14 @@ func (a *app) loop() error {
 			return fmt.Errorf("error event: %w", ev)
 
 		case *tcell.EventResize:
-			a.coverDrawer.clear()
-			a.draw()
-			if !sawInitialResize {
-				sawInitialResize = true
-				a.progressDrawer.spawnProgressDrawers(a.screen.Show)
+			w, h := ev.Size()
+			a.rootDrawer.SetScope(func(x, y int, r rune, s tcell.Style) {
+				a.screen.SetContent(x, y, r, nil, s)
+			}, w, h)
+			a.coverDrawer.Clear()
+			a.rootDrawer.Draw()
+			if a.streamSeekCloser != nil && !a.paused {
+				a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
 			}
 
 		case *tcell.EventKey:
@@ -268,11 +260,14 @@ func (a *app) queueFocusShift(i int) {
 	a.queueFocusIdx = newIdx
 
 	if i != 0 {
-		a.queueDrawer.draw()
-		a.screen.Show()
+		a.queueDrawer.Draw()
 	}
 }
 
+// TODO: put the removed track in a clipboard thing so that people can cut and
+// paste. Maybe allow yank too? That would really only let you duplicate songs
+// so idk if that's useful... but it probably wouldn't be hard to support
+// either so...
 func (a *app) removeFocused() {
 	if a.shuffleIdx != nil && *a.shuffleIdx > a.queueFocusIdx {
 		*a.shuffleIdx--
@@ -282,15 +277,14 @@ func (a *app) removeFocused() {
 
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
-		a.bottomDrawer.draw()
+		a.bottomDrawer.Draw()
 	}
 
 	if a.queueFocusIdx >= len(a.queue) {
 		a.queueFocusIdx = len(a.queue) - 1
 	}
 
-	a.queueDrawer.draw()
-	a.screen.Show()
+	a.queueDrawer.Draw()
 }
 
 func (a *app) jumpFocused() {
@@ -305,10 +299,10 @@ func (a *app) jumpFocused() {
 	}
 
 	switch a.repeat {
-	case repeatNone:
+	case types.RepeatNone:
 		a.queue = a.queue[a.queueFocusIdx:]
 		a.queueFocusIdx = 0
-	case repeatTrack, repeatQueue:
+	case types.RepeatTrack, types.RepeatQueue:
 		if a.shuffleIdx != nil {
 			if *a.shuffleIdx >= a.queueFocusIdx {
 				shuffle(a.queue[:a.queueFocusIdx])
@@ -326,27 +320,26 @@ func (a *app) jumpFocused() {
 	a.queueFocusIdx = 0
 
 	a.playQueueTop()
-	a.queueDrawer.draw()
-	a.bottomDrawer.draw()
-	a.screen.Show()
+	a.queueDrawer.Draw()
+	a.bottomDrawer.Draw()
 }
 
 func (a *app) cyclePause() {
 	speaker.Lock()
 	a.paused = !a.paused
 	speaker.Unlock()
-	a.progressDrawer.drawPause()
+	a.progressDrawer.DrawPause()
 	if a.paused {
-		a.progressDrawer.cancelProgressDrawers()
-		a.progressDrawer.drawBar()
+		a.progressDrawer.CancelProgressDrawers()
+		a.progressDrawer.DrawBar()
 	} else if len(a.queue) > 0 {
-		a.progressDrawer.spawnProgressDrawers(a.screen.Show)
+		a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
 	}
 }
 
 func (a *app) cycleRepeat() {
 	a.repeat = (a.repeat + 1) % 3
-	a.progressDrawer.drawRepeat()
+	a.progressDrawer.DrawRepeat()
 }
 
 func (a *app) cycleShuffle() {
@@ -356,7 +349,7 @@ func (a *app) cycleShuffle() {
 	} else {
 		a.shuffleIdx = nil
 	}
-	a.progressDrawer.drawShuffle()
+	a.progressDrawer.DrawShuffle()
 }
 
 func shuffle[T any](s []T) {
@@ -384,8 +377,7 @@ func (a *app) reshuffle() {
 		shuffle(a.queue[*a.shuffleIdx:])
 	}
 
-	a.queueDrawer.draw()
-	a.screen.Show()
+	a.queueDrawer.Draw()
 }
 
 func (a *app) skip() {
@@ -399,7 +391,7 @@ func (a *app) skipLocked() {
 		return
 	}
 
-	if a.repeat == repeatTrack || (a.repeat == repeatQueue && len(a.queue) == 1) {
+	if a.repeat == types.RepeatTrack || (a.repeat == types.RepeatQueue && len(a.queue) == 1) {
 		if err := a.streamSeekCloser.Seek(0); err != nil {
 			a.fatalf(err, "failed to seek ssc")
 		}
@@ -408,7 +400,7 @@ func (a *app) skipLocked() {
 	}
 
 	// update queue
-	if a.repeat == repeatNone {
+	if a.repeat == types.RepeatNone {
 		a.queue = a.queue[1:]
 		if a.queueFocusIdx >= len(a.queue) {
 			a.queueFocusIdx = len(a.queue) - 1
@@ -436,9 +428,8 @@ func (a *app) skipLocked() {
 
 	a.playQueueTopLocked()
 
-	a.queueDrawer.draw()
-	a.bottomDrawer.draw()
-	a.screen.Show()
+	a.queueDrawer.Draw()
+	a.bottomDrawer.Draw()
 }
 
 // callers are required to verify that queue[0] exists
@@ -473,7 +464,7 @@ func (a *app) playQueueTopLocked() {
 	} else {
 		a.streamSeekCloser = nil
 		a.streamer = nil
-		a.progressDrawer.cancelProgressDrawers()
+		a.progressDrawer.CancelProgressDrawers()
 	}
 }
 
@@ -489,8 +480,7 @@ func (a *app) seekBy(d time.Duration, reverse bool) {
 		a.fatalf(err, "failed to seekBy")
 	}
 
-	a.progressDrawer.drawBar()
-	a.screen.Show()
+	a.progressDrawer.DrawBar()
 }
 
 func (a *app) seekPercent(p float32) {
@@ -504,8 +494,7 @@ func (a *app) seekPercent(p float32) {
 		a.fatalf(err, "failed to seekPercent")
 	}
 
-	a.progressDrawer.drawBar()
-	a.screen.Show()
+	a.progressDrawer.DrawBar()
 }
 
 func (a *app) close() {
