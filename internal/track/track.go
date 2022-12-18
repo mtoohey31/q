@@ -32,6 +32,10 @@ type Track struct {
 	cover     image.Image
 	coverErr  error
 
+	lyricsOnce sync.Once
+	lyrics     string
+	lyricsErr  error
+
 	metaOnce sync.Once
 	meta     map[string]string
 	metaErr  error
@@ -139,6 +143,41 @@ func (t *Track) Cover() (image.Image, error) {
 	})
 
 	return t.cover, t.coverErr
+}
+
+// Lyrics returns the lyrics for this track, if it has any. This function will
+// return nil, nil if no error is encountered and the file does not have any
+// lyrics.
+func (t *Track) Lyrics() (string, error) {
+	t.lyricsOnce.Do(func() {
+		tag, err := id3v2.Open(t.Path, id3v2.Options{
+			Parse:       true,
+			ParseFrames: []string{"Unsynchronised lyrics/text transcription"},
+		})
+		if err != nil {
+			t.lyricsErr = err
+			return
+		}
+		for _, f := range tag.GetFrames(tag.CommonID("Unsynchronised lyrics/text transcription")) {
+			ulf, ok := f.(id3v2.UnsynchronisedLyricsFrame)
+			if !ok {
+				t.lyricsErr = fmt.Errorf("lyrics assert failed")
+				return
+			}
+
+			// TODO: handle when there are multiple frames
+			t.lyrics = ulf.Lyrics
+			break
+		}
+
+		err = tag.Close()
+		if err != nil {
+			t.lyricsErr = err
+			return
+		}
+	})
+
+	return t.lyrics, t.coverErr
 }
 
 // Metadata returns all metadata for this track, if it can be fetched. This

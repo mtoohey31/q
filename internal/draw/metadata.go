@@ -22,7 +22,12 @@ func (m *MetadataDrawer) Draw() error {
 
 	meta, err := (*m.Queue)[0].Metadata()
 	if err != nil {
-		return fmt.Errorf("failed to get metadata queue[0]: %w", err)
+		return fmt.Errorf("failed to get metadata for queue[0]: %w", err)
+	}
+
+	if len(meta) == 0 {
+		centeredString(m.d, m.w, m.h, "no metadata found")
+		return nil
 	}
 
 	type idTextPair struct {

@@ -38,12 +38,11 @@ func loadConfig() ([]string, error) {
 }
 
 type appOptions struct {
-	Shuffle    bool         `short:"s" negatable:"true" default:"true"`
-	Repeat     types.Repeat `short:"r" default:"queue"`
-	SampleRate uint         `short:"t" default:"44100"`
-
-	// TODO: remove this once I rework stuff
-	Paths []string `arg:"" type:"path" optional:"true"`
+	Shuffle        bool         `short:"s" negatable:"true" default:"true"`
+	Repeat         types.Repeat `short:"r" default:"queue"`
+	SampleRate     uint         `short:"t" default:"44100"`
+	MusicDir       string       `short:"m" default:"." type:"path"`
+	InitialQueries []string     `arg:"" optional:"true"`
 }
 
 func main() {

@@ -134,6 +134,10 @@ func (p *ProgressDrawer) DrawBar() {
 	barCompleteW := int(progress * float64(barW))
 	drawString(offset(p.scope.d, dW+1, 1), -1, strings.Repeat("█", barCompleteW), tcell.StyleDefault)
 
+	if barCompleteW > barW {
+		barCompleteW = barW
+	}
+
 	if barCompleteW != barW {
 		// the fractional part of a box not drawn, should be between 0 and 1
 		remainder := progress*float64(barW) - float64(barCompleteW)

@@ -50,3 +50,11 @@ func drawString(d drawFunc, maxW int, s string, style tcell.Style) int {
 	}
 	return x
 }
+
+func centeredString(d drawFunc, w, h int, s string) {
+	textY := h / 2
+	clear(d, w, h)
+	drawString(offset(d, (w-len(s))/2, textY), w, s, tcell.StyleDefault.
+		Dim(true).Italic(true).Foreground(tcell.ColorGray))
+	clear(offset(d, 0, textY+1), w, h-textY-1)
+}

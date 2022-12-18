@@ -16,12 +16,8 @@ type QueueDrawer struct {
 
 func (q *QueueDrawer) Draw() error {
 	if len(*q.Queue) == 0 {
-		s := "queue empty"
-		textX := q.h / 2
-		clear(q.d, q.w, textX)
-		drawString(offset(q.d, (q.w-len(s))/2, textX), q.w, s, tcell.StyleDefault.
-			Dim(true).Italic(true).Foreground(tcell.ColorGray))
-		clear(offset(q.d, 0, textX+1), q.w, q.h-textX-1)
+		centeredString(q.d, q.w, q.h, "queue empty")
+		return nil
 	}
 
 	y := 0

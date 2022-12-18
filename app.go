@@ -14,6 +14,11 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+const (
+	metadataIdx int = iota
+	lyricsIdx
+)
+
 type app struct {
 	// constant configuration options
 	sampleRate beep.SampleRate
@@ -31,10 +36,11 @@ type app struct {
 	warning       error
 
 	// drawers
-	rootDrawer                                draw.DrawSetScoper
-	queueDrawer, bottomDrawer, metadataDrawer draw.Drawer
-	coverDrawer                               draw.DynWDrawClearer
-	progressDrawer                            *draw.ProgressDrawer
+	rootDrawer                draw.DrawSetScoper
+	queueDrawer, bottomDrawer draw.Drawer
+	coverDrawer               draw.DynWDrawClearer
+	switchableDrawer          *draw.SwitchableDrawer
+	progressDrawer            *draw.ProgressDrawer
 
 	// external resources
 	streamer         beep.Streamer
@@ -131,8 +137,24 @@ func newApp(options appOptions) (a *app, err error) {
 		sampleRate: beep.SampleRate(options.SampleRate),
 		repeat:     options.Repeat,
 	}
+
+	pathSet := map[string]struct{}{}
+	for _, query := range options.InitialQueries {
+		paths, err := Query(options.MusicDir, query)
+		if err != nil {
+			return nil, fmt.Errorf(`failed to execute query "%s": %w`, query, err)
+		}
+		for _, p := range paths {
+			pathSet[p] = struct{}{}
+		}
+	}
+	paths := make([]string, 0, len(pathSet))
+	for path := range pathSet {
+		paths = append(paths, path)
+	}
+
 	if options.Shuffle {
-		shuffleIdx := len(options.Paths)
+		shuffleIdx := len(paths)
 		a.shuffleIdx = &shuffleIdx
 	}
 
@@ -152,8 +174,8 @@ func newApp(options appOptions) (a *app, err error) {
 		}
 	}()
 
-	a.queue = make([]*track.Track, len(options.Paths))
-	for i, path := range options.Paths {
+	a.queue = make([]*track.Track, len(paths))
+	for i, path := range paths {
 		a.queue[i] = &track.Track{Path: path}
 	}
 
@@ -186,7 +208,14 @@ func newApp(options appOptions) (a *app, err error) {
 		},
 	}
 
-	a.metadataDrawer = &draw.MetadataDrawer{Queue: &a.queue}
+	a.switchableDrawer = &draw.SwitchableDrawer{
+		Drawers: []draw.Drawer{
+			metadataIdx: &draw.MetadataDrawer{Queue: &a.queue},
+			lyricsIdx:   &draw.LyricsDrawer{Queue: &a.queue},
+			// TODO: search
+			// TODO: visualizer
+		},
+	}
 
 	a.bottomDrawer = &draw.HorizDynLimitRatioSplitDrawer{
 		Ratio: 1.0 / 4,
@@ -203,8 +232,7 @@ func newApp(options appOptions) (a *app, err error) {
 		Top: &draw.HorizRatioSplitDrawer{
 			Ratio: 1.0 / 3,
 			Left:  a.queueDrawer,
-			// TODO: switchable between lyrics, visualizer, full metadata, search
-			Right: a.metadataDrawer,
+			Right: a.switchableDrawer,
 		},
 		Bottom: a.bottomDrawer,
 	}
@@ -252,10 +280,10 @@ func (a *app) loop() error {
 				return nil
 
 			case tcell.KeyLeft:
-				a.seekBy(time.Second*5, false)
+				a.seekBy(time.Second * -5)
 
 			case tcell.KeyRight:
-				a.seekBy(time.Second*5, true)
+				a.seekBy(time.Second * 5)
 
 			case tcell.KeyDown:
 				a.queueFocusShift(1)
@@ -265,6 +293,9 @@ func (a *app) loop() error {
 
 			case tcell.KeyEnter:
 				a.jumpFocused()
+
+			case tcell.KeyTAB:
+				a.fatalfIf(a.switchableDrawer.Cycle(), "cycle failed")
 
 			case tcell.KeyRune:
 				switch ev.Rune() {
@@ -351,7 +382,7 @@ func (a *app) paste(before bool) {
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
 		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-		a.warnfIf(a.metadataDrawer.Draw(), "metadata draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
 	}
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 }
@@ -372,7 +403,7 @@ func (a *app) removeFocused() {
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
 		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-		a.warnfIf(a.metadataDrawer.Draw(), "metadata draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
 	}
 
 	if a.queueFocusIdx >= len(a.queue) {
@@ -432,7 +463,7 @@ func (a *app) jumpFocused() {
 
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.warnfIf(a.metadataDrawer.Draw(), "metadata draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
 }
 
 func (a *app) cyclePause() {
@@ -546,7 +577,7 @@ func (a *app) skipLocked(r types.Repeat) {
 
 	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.warnfIf(a.metadataDrawer.Draw(), "metadata draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
 }
 
 // callers are required to verify that queue[0] exists
@@ -583,11 +614,13 @@ func (a *app) playQueueTopLocked() {
 	}
 }
 
-func (a *app) seekBy(d time.Duration, reverse bool) {
+func (a *app) seekBy(d time.Duration) {
 	speaker.Lock()
 	newP := a.streamSeekCloser.Position() + a.format.SampleRate.N(d)
 	if newP > a.streamSeekCloser.Len() {
 		newP = a.streamSeekCloser.Len() - 1
+	} else if newP < 0 {
+		newP = 0
 	}
 	a.warnfIf(a.streamSeekCloser.Seek(newP), "failed to seekBy")
 	speaker.Unlock()
