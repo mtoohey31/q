@@ -478,8 +478,15 @@ func (p *progressDrawer) drawBar() {
 
 	progress := float64(currD) / float64(totalD)
 	barCompleteW := int(progress * float64(barW))
-	drawString(offset(p.prevDrawer, dW+1, 1), -1, strings.Repeat("█", barCompleteW)+
-		strings.Repeat(" ", barW-barCompleteW), tcell.StyleDefault)
+	drawString(offset(p.prevDrawer, dW+1, 1), -1, strings.Repeat("█", barCompleteW), tcell.StyleDefault)
+
+	// the fractional part of a box not drawn, should be between 0 and 1
+	remainder := progress*float64(barW) - float64(barCompleteW)
+	partialBoxes := [8]rune{' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'}
+	p.prevDrawer(dW+1+barCompleteW, 1, partialBoxes[int(remainder*8)], tcell.StyleDefault)
+
+	drawString(offset(p.prevDrawer, dW+1+barCompleteW+1, 1), -1,
+		strings.Repeat(" ", barW-barCompleteW-1), tcell.StyleDefault)
 
 	p.prevDrawer(*p.prevW-dW-1, 1, '|', tcell.StyleDefault)
 	drawString(offset(p.prevDrawer, *p.prevW-dW, 1), -1, totalS, tcell.StyleDefault)
@@ -502,9 +509,9 @@ func (p *progressDrawer) spawnProgressDrawers(show func()) {
 				show()
 			}
 
-			// the time it takes to draw one section of the bar
+			// the time it takes to draw one fractional section of the bar
 			_, barW := p.widths()
-			redrawTime := (p.format).SampleRate.D((*p.streamSeekCloser).Len() / barW)
+			redrawTime := (p.format).SampleRate.D((*p.streamSeekCloser).Len() / barW / 8)
 
 			select {
 			case <-time.After(redrawTime):
