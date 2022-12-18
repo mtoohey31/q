@@ -18,27 +18,19 @@ type HorizRatioSplitDrawer struct {
 func (hrs *HorizRatioSplitDrawer) Draw() error {
 	leftW := int(float32(hrs.w) * hrs.Ratio)
 	// h-1 leaves space for the horizontal line
-	hrs.Left.setScope(hrs.d, leftW, hrs.h-1)
+	hrs.Left.setScope(hrs.d, leftW, hrs.h)
 	if err := hrs.Left.Draw(); err != nil {
 		return err
 	}
 
-	// draw line
-	for y := 0; y < hrs.h-1; y++ {
-		hrs.d(leftW, y, '│', tcell.StyleDefault)
+	// draw gap
+	for y := 0; y < hrs.h; y++ {
+		hrs.d(leftW, y, ' ', tcell.StyleDefault)
 	}
-	for x := 0; x < hrs.w; x++ {
-		if x == leftW {
-			continue
-		}
-
-		hrs.d(x, hrs.h-1, '─', tcell.StyleDefault)
-	}
-	hrs.d(leftW, hrs.h-1, '┴', tcell.StyleDefault)
 
 	rightX := leftW + 1 // leave space for vertical line
 	rightW := hrs.w - rightX
-	hrs.Right.setScope(offset(hrs.d, rightX, 0), rightW, hrs.h-1)
+	hrs.Right.setScope(offset(hrs.d, rightX, 0), rightW, hrs.h)
 	return hrs.Right.Draw()
 }
 

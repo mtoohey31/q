@@ -31,10 +31,10 @@ type app struct {
 	warning       error
 
 	// drawers
-	rootDrawer                draw.DrawSetScoper
-	queueDrawer, bottomDrawer draw.Drawer
-	coverDrawer               draw.DynWDrawClearer
-	progressDrawer            *draw.ProgressDrawer
+	rootDrawer                                draw.DrawSetScoper
+	queueDrawer, bottomDrawer, metadataDrawer draw.Drawer
+	coverDrawer                               draw.DynWDrawClearer
+	progressDrawer                            *draw.ProgressDrawer
 
 	// external resources
 	streamer         beep.Streamer
@@ -186,6 +186,8 @@ func newApp(options appOptions) (a *app, err error) {
 		},
 	}
 
+	a.metadataDrawer = &draw.MetadataDrawer{Queue: &a.queue}
+
 	a.bottomDrawer = &draw.HorizDynLimitRatioSplitDrawer{
 		Ratio: 1.0 / 4,
 		Left:  a.coverDrawer,
@@ -201,7 +203,8 @@ func newApp(options appOptions) (a *app, err error) {
 		Top: &draw.HorizRatioSplitDrawer{
 			Ratio: 1.0 / 3,
 			Left:  a.queueDrawer,
-			Right: &draw.FillDrawer{R: ' '}, // TODO: switchable between lyrics, visualizer, full metadata, search
+			// TODO: switchable between lyrics, visualizer, full metadata, search
+			Right: a.metadataDrawer,
 		},
 		Bottom: a.bottomDrawer,
 	}
@@ -348,6 +351,7 @@ func (a *app) paste(before bool) {
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
 		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+		a.warnfIf(a.metadataDrawer.Draw(), "metadata draw failed")
 	}
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 }
@@ -368,6 +372,7 @@ func (a *app) removeFocused() {
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
 		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+		a.warnfIf(a.metadataDrawer.Draw(), "metadata draw failed")
 	}
 
 	if a.queueFocusIdx >= len(a.queue) {
@@ -427,6 +432,7 @@ func (a *app) jumpFocused() {
 
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+	a.warnfIf(a.metadataDrawer.Draw(), "metadata draw failed")
 }
 
 func (a *app) cyclePause() {
@@ -540,6 +546,7 @@ func (a *app) skipLocked(r types.Repeat) {
 
 	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+	a.warnfIf(a.metadataDrawer.Draw(), "metadata draw failed")
 }
 
 // callers are required to verify that queue[0] exists

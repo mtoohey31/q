@@ -31,6 +31,10 @@ type Track struct {
 	coverOnce sync.Once
 	cover     image.Image
 	coverErr  error
+
+	metaOnce sync.Once
+	meta     map[string]string
+	metaErr  error
 }
 
 func (t *Track) initInfo() {
@@ -135,6 +139,57 @@ func (t *Track) Cover() (image.Image, error) {
 	})
 
 	return t.cover, t.coverErr
+}
+
+// Metadata returns all metadata for this track, if it can be fetched. This
+// function will return nil, nil if no error is encountered but no metadata can
+// be found.
+func (t *Track) Metadata() (map[string]string, error) {
+	t.metaOnce.Do(func() {
+		tag, err := id3v2.Open(t.Path, id3v2.Options{Parse: true})
+		if err != nil {
+			t.metaErr = err
+			return
+		}
+
+		t.meta = map[string]string{}
+
+		var ids map[string]string
+		if tag.Version() == 3 {
+			ids = id3v2.V23CommonIDs
+		} else {
+			ids = id3v2.V24CommonIDs
+		}
+
+		getIDName := func(id string) string {
+			var shortestName string
+			for name, oID := range ids {
+				if id == oID && (shortestName == "" || len(shortestName) > len(name)) {
+					shortestName = name
+				}
+			}
+
+			if shortestName == "" {
+				return id
+			}
+
+			return shortestName
+		}
+
+		for id := range tag.AllFrames() {
+			if textFrame, ok := tag.GetLastFrame(id).(id3v2.TextFrame); ok {
+				t.meta[getIDName(id)] = textFrame.Text
+			}
+		}
+
+		err = tag.Close()
+		if err != nil {
+			t.metaErr = err
+			return
+		}
+	})
+
+	return t.meta, t.metaErr
 }
 
 // Decode returns a beep.StreamSeekCloser and beep.Format for this track.
