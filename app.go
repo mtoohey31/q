@@ -294,6 +294,7 @@ func (a *app) jumpFocused() {
 				a.fatalf(err, "failed to seek ssc")
 			}
 		}
+		a.progressDrawer.DrawBar()
 
 		return
 	}
