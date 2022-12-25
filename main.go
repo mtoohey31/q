@@ -40,6 +40,7 @@ func loadConfig() ([]string, error) {
 type appOptions struct {
 	Shuffle        bool         `short:"s" negatable:"true" default:"true"`
 	Repeat         types.Repeat `short:"r" default:"queue"`
+	InitialTab     types.Tab    `short:"i" default:"metadata"`
 	SampleRate     uint         `short:"t" default:"44100"`
 	MusicDir       string       `short:"m" default:"." type:"path"`
 	InitialQueries []string     `arg:"" optional:"true"`
@@ -47,8 +48,10 @@ type appOptions struct {
 
 func main() {
 	var flags appOptions
-	parser := kong.Must(&flags, kong.TypeMapper(
-		reflect.TypeOf(types.RepeatNone), types.RepeatMapper{}))
+	parser := kong.Must(&flags,
+		kong.TypeMapper(reflect.TypeOf(types.RepeatNone), types.RepeatMapper{}),
+		kong.TypeMapper(reflect.TypeOf(types.TabMetadata), types.TabMapper{}),
+	)
 
 	// from here on out, we use this same error variable for the current error,
 	// and we call return if it is non-nil. by doing this, we allow future

@@ -1,31 +1,33 @@
 package draw
 
+import "mtoohey.com/q/internal/types"
+
 type SwitchableDrawer struct {
 	Drawers []Drawer
 
-	idx int
+	Tab types.Tab
 	scope
 }
 
-func (s *SwitchableDrawer) Cycle() (int, error) {
+func (s *SwitchableDrawer) Cycle() (types.Tab, error) {
 	if len(s.Drawers) > 1 {
-		if clearer, ok := s.Drawers[s.idx].(Clearer); ok {
+		if clearer, ok := s.Drawers[s.Tab].(Clearer); ok {
 			if err := clearer.Clear(); err != nil {
 				return 0, err
 			}
 		}
 	}
-	s.idx = (s.idx + 1) % len(s.Drawers)
-	return s.idx, s.Draw()
+	s.Tab = types.Tab((int(s.Tab) + 1) % len(s.Drawers))
+	return s.Tab, s.Draw()
 }
 
 func (s *SwitchableDrawer) Draw() error {
-	s.Drawers[s.idx].setScope(s.d, s.w, s.h)
-	return s.Drawers[s.idx].Draw()
+	s.Drawers[s.Tab].setScope(s.d, s.w, s.h)
+	return s.Drawers[s.Tab].Draw()
 }
 
-func (s *SwitchableDrawer) DrawIfVisible(idx int) error {
-	if s.idx == idx {
+func (s *SwitchableDrawer) DrawIfVisible(tab types.Tab) error {
+	if s.Tab == tab {
 		return s.Draw()
 	}
 

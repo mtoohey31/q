@@ -16,12 +16,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-const (
-	metadataIdx int = iota
-	lyricsIdx
-	searchIdx
-)
-
 type app struct {
 	// constant configuration options
 	sampleRate beep.SampleRate
@@ -220,11 +214,12 @@ func newApp(options appOptions) (a *app, err error) {
 
 	a.switchableDrawer = &draw.SwitchableDrawer{
 		Drawers: []draw.Drawer{
-			metadataIdx: &draw.MetadataDrawer{Queue: &a.queue},
-			lyricsIdx:   &draw.LyricsDrawer{Queue: &a.queue},
-			searchIdx:   a.searchDrawer,
+			types.TabMetadata: &draw.MetadataDrawer{Queue: &a.queue},
+			types.TabLyrics:   &draw.LyricsDrawer{Queue: &a.queue},
+			types.TabSearch:   a.searchDrawer,
 			// TODO: visualizer
 		},
+		Tab: options.InitialTab,
 	}
 
 	a.bottomDrawer = &draw.HorizDynLimitRatioSplitDrawer{
@@ -330,7 +325,7 @@ func (a *app) loop() error {
 			case tcell.KeyTAB:
 				idx, err := a.switchableDrawer.Cycle()
 				a.fatalfIf(err, "cycle failed")
-				a.typing = idx == searchIdx
+				a.typing = idx == types.TabSearch
 
 			case tcell.KeyBackspace2:
 				if !a.typing {
@@ -432,8 +427,8 @@ func (a *app) paste(before bool) {
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
 		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-		a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
-		a.warnfIf(a.switchableDrawer.DrawIfVisible(lyricsIdx), "lyrics draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
 	}
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 }
@@ -454,8 +449,8 @@ func (a *app) removeFocused() {
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
 		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-		a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
-		a.warnfIf(a.switchableDrawer.DrawIfVisible(lyricsIdx), "lyrics draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
 	}
 
 	if a.queueFocusIdx >= len(a.queue) {
@@ -515,8 +510,8 @@ func (a *app) jumpFocused() {
 
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(lyricsIdx), "lyrics draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
 }
 
 func (a *app) cyclePause() {
@@ -631,8 +626,8 @@ func (a *app) skipLocked(r types.Repeat) {
 
 	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(metadataIdx), "metadata draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(lyricsIdx), "lyrics draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
 }
 
 // callers are required to verify that queue[0] exists

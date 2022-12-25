@@ -39,10 +39,12 @@ func (s *SearchDrawer) ShiftFocus(i int) error {
 func (s *SearchDrawer) Draw() error {
 	w, _ := s.Screen.Size()
 
-	s.Screen.ShowCursor(w/3+1+len(s.String()), 0)
+	x := drawString(s.d, s.w, s.String(), tcell.StyleDefault.Underline(true))
+
+	// TODO: test this
+	s.Screen.ShowCursor(w/3+1+x, 0)
 	s.Screen.SetCursorStyle(tcell.CursorStyleSteadyBar)
 
-	x := drawString(s.d, s.w, s.String(), tcell.StyleDefault.Underline(true))
 	for ; x < w; x++ {
 		s.d(x, 0, ' ', tcell.StyleDefault.Underline(true))
 	}
