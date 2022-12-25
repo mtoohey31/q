@@ -637,7 +637,6 @@ func (a *app) playQueueTop() {
 	speaker.Unlock()
 }
 
-// callers are required to verify that queue[0] exists
 func (a *app) playQueueTopLocked() {
 	if a.streamSeekCloser != nil {
 		a.warnfIf(a.streamSeekCloser.Close(), "failed to close ssc")
