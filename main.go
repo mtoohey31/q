@@ -43,6 +43,7 @@ type appOptions struct {
 	InitialTab     types.Tab    `short:"i" default:"metadata"`
 	SampleRate     uint         `short:"t" default:"44100"`
 	MusicDir       string       `short:"m" default:"." type:"path"`
+	ScrollOff      int          `short:"o" default:"7"`
 	InitialQueries []string     `arg:"" optional:"true"`
 }
 

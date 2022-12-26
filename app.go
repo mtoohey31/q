@@ -197,6 +197,7 @@ func newApp(options appOptions) (a *app, err error) {
 	a.queueDrawer = &draw.QueueDrawer{
 		Queue:         &a.queue,
 		QueueFocusIdx: &a.queueFocusIdx,
+		ScrollOff:     options.ScrollOff,
 	}
 
 	a.coverDrawer = &draw.CoverDynWDrawer{
