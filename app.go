@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
 	"unicode/utf8"
@@ -305,6 +306,12 @@ func (a *app) loop() error {
 					a.queueFocusShift(-1)
 				}
 
+			case tcell.KeyCtrlD, tcell.KeyCtrlF:
+				a.queueFocusShift(10)
+
+			case tcell.KeyCtrlU, tcell.KeyCtrlB:
+				a.queueFocusShift(-10)
+
 			case tcell.KeyEnter:
 				if a.typing {
 					if res := a.searchDrawer.FocusedResult(); res != "" {
@@ -356,6 +363,12 @@ func (a *app) loop() error {
 
 				case 'k':
 					a.queueFocusShift(-1)
+
+				case 'g':
+					a.queueFocusShift(math.MinInt)
+
+				case 'G':
+					a.queueFocusShift(math.MaxInt)
 
 				case 'd', 'x':
 					a.removeFocused()
