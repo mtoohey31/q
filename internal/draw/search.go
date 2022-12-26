@@ -60,6 +60,7 @@ func (s *SearchDrawer) Draw() error {
 		if err != nil {
 			return err
 		}
+		s.prevQuery = s.query
 
 		if s.resultsIdx > len(s.results) {
 			s.resultsIdx = len(s.results)

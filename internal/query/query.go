@@ -5,7 +5,16 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+
+	"github.com/lithammer/fuzzysearch/fuzzy"
 )
+
+// TODO: add support for outlook-like queries on metadata as in
+// artist:"PEOPLE 1", album:PEOPLE, which should also match fuzzily and
+// case-insensitively
+
+// TODO: write my own fuzzy algorithm so I can tweak the details
 
 func Query(musicDir, query string) ([]string, error) {
 	path := query
@@ -18,34 +27,40 @@ func Query(musicDir, query string) ([]string, error) {
 		if !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
-	} else if i.IsDir() && !wasAbs {
-		paths := []string{}
-
-		err := filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			switch d.Name() {
-			case ".git", ".thumbnails":
-				return fs.SkipDir
-			}
-
-			i, err := d.Info()
-			if err != nil {
-				return err
-			}
-
-			if i.Mode().IsRegular() {
-				paths = append(paths, path)
-			}
-
-			return nil
-		})
-		return paths, err
 	} else if i.Mode().IsRegular() {
 		return []string{path}, nil
 	}
 
-	return nil, nil
+	paths := []string{}
+	err = fs.WalkDir(os.DirFS(musicDir), ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() && d.Name() != "." && d.Name()[0] == '.' {
+			return fs.SkipDir
+		}
+
+		i, err := d.Info()
+		if err != nil {
+			return err
+		}
+
+		if i.Mode().IsRegular() {
+			paths = append(paths, path)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ranks := fuzzy.RankFindNormalizedFold(query, paths)
+	sort.Sort(ranks)
+	paths = paths[:len(ranks)]
+	for i, rank := range ranks {
+		paths[i] = filepath.Join(musicDir, rank.Target)
+	}
+	return paths, nil
 }

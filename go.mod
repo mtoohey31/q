@@ -7,6 +7,7 @@ require (
 	github.com/bogem/id3v2 v1.2.0
 	github.com/faiface/beep v1.1.0
 	github.com/gdamore/tcell/v2 v2.5.3
+	github.com/lithammer/fuzzysearch v1.1.5
 	github.com/mattn/go-runewidth v0.0.13
 )
 
