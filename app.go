@@ -505,6 +505,7 @@ func (a *app) jumpFocused() {
 		}
 		if wasPaused {
 			a.progressDrawer.DrawPause()
+			a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
 		}
 		a.progressDrawer.DrawBar()
 
@@ -538,6 +539,7 @@ func (a *app) jumpFocused() {
 		a.paused = false
 		speaker.Unlock()
 		a.progressDrawer.DrawPause()
+		a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
 	}
 
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
