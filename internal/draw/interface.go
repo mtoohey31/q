@@ -1,5 +1,9 @@
 package draw
 
+// TODO: rework things so that drawers know there absolute positions on the
+// screen so I don't have to get into wierd hacks with drawers that can't use
+// drawFunc
+
 // Drawer draws to the screen, taking up a fixed box.
 type Drawer interface {
 	// setScope sets the scope of this drawer to be the box from x=0..w and

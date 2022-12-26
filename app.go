@@ -30,16 +30,16 @@ type app struct {
 	clipboard     *track.Track
 	queue         []*track.Track
 	queueFocusIdx int
-	typing        bool
 	warning       error
 
 	// drawers
-	rootDrawer                draw.DrawSetScoper
-	queueDrawer, bottomDrawer draw.Drawer
-	coverDrawer               draw.DynWDrawClearer
-	switchableDrawer          *draw.SwitchableDrawer
-	searchDrawer              *draw.SearchDrawer
-	progressDrawer            *draw.ProgressDrawer
+	rootDrawer       draw.DrawSetScoper
+	queueDrawer      *draw.QueueDrawer
+	bottomDrawer     draw.Drawer
+	coverDrawer      draw.DynWDrawClearer
+	switchableDrawer *draw.SwitchableDrawer
+	searchDrawer     *draw.SearchDrawer
+	progressDrawer   *draw.ProgressDrawer
 
 	// external resources
 	streamer         beep.Streamer
@@ -286,43 +286,43 @@ func (a *app) loop() error {
 				return nil
 
 			case tcell.KeyLeft:
-				if a.typing {
+				if a.typing() {
 					a.fatalfIf(a.searchDrawer.Left(), "search left failed")
 				} else {
 					a.seekBy(time.Second * -5)
 				}
 
 			case tcell.KeyRight:
-				if a.typing {
+				if a.typing() {
 					a.fatalfIf(a.searchDrawer.Right(), "search right failed")
 				} else {
 					a.seekBy(time.Second * 5)
 				}
 
 			case tcell.KeyHome, tcell.KeyCtrlA:
-				if a.typing {
+				if a.typing() {
 					a.fatalfIf(a.searchDrawer.ToStart(), "search to start failed")
 				}
 
 			case tcell.KeyEnd, tcell.KeyCtrlE:
-				if a.typing {
+				if a.typing() {
 					a.fatalfIf(a.searchDrawer.ToEnd(), "search to end failed")
 				}
 
 			case tcell.KeyCtrlW:
-				if a.typing {
+				if a.typing() {
 					a.fatalfIf(a.searchDrawer.KillWord(), "search kill word failed")
 				}
 
 			case tcell.KeyDown:
-				if a.typing {
+				if a.searching() {
 					a.fatalfIf(a.searchDrawer.ShiftFocus(1), "search shift focus failed")
 				} else {
 					a.queueFocusShift(1)
 				}
 
 			case tcell.KeyUp:
-				if a.typing {
+				if a.searching() {
 					a.fatalfIf(a.searchDrawer.ShiftFocus(-1), "search shift focus failed")
 				} else {
 					a.queueFocusShift(-1)
@@ -334,39 +334,73 @@ func (a *app) loop() error {
 			case tcell.KeyCtrlU, tcell.KeyCtrlB:
 				a.queueFocusShift(-10)
 
+			case tcell.KeyPgDn:
+				a.queueFocusShift(a.queueDrawer.Height())
+
+			case tcell.KeyPgUp:
+				a.queueFocusShift(-a.queueDrawer.Height())
+
 			case tcell.KeyEnter:
-				if a.typing {
-					if res := a.searchDrawer.FocusedResult(); res != "" {
-						a.queue = append(a.queue, &track.Track{Path: res})
-						if len(a.queue) == 1 {
-							a.playQueueTop()
-							if a.paused {
-								a.paused = false
-							}
-							a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-							a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
-						}
-						a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
-					}
-				} else {
+				if a.typing() && a.searchDrawer.ResultsIdx == 0 {
+					a.fatalfIf(a.searchDrawer.ShiftFocus(1), "search shift focus failed")
+				} else if !a.searching() {
 					a.jumpFocused()
 				}
 
 			case tcell.KeyTAB:
-				idx, err := a.switchableDrawer.Cycle()
-				a.fatalfIf(err, "cycle failed")
-				a.typing = idx == types.TabSearch
+				a.fatalfIf(a.switchableDrawer.Cycle(), "cycle failed")
 
 			case tcell.KeyBackspace2:
-				if !a.typing {
+				if !a.typing() {
 					break
 				}
 				a.fatalfIf(a.searchDrawer.Backspace(), "search backspace failed")
 
 			case tcell.KeyRune:
-				if a.typing {
+				if a.typing() {
 					a.fatalfIf(a.searchDrawer.Insert(ev.Rune()), "search insert failed")
 					break
+				} else if a.searching() {
+					switch ev.Rune() {
+					case 'a', 'A':
+						if res := a.searchDrawer.FocusedResult(); res != "" {
+							a.queue = append(a.queue, &track.Track{Path: res})
+							if len(a.queue) == 1 {
+								a.playQueueTop()
+								a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+							}
+							a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+						}
+					case 'i':
+						res := a.searchDrawer.FocusedResult()
+						if res == "" {
+							break
+						}
+
+						if len(a.queue) > 0 {
+							a.queue = append([]*track.Track{a.queue[0], {Path: res}}, a.queue[1:]...)
+							*a.shuffleIdx++
+							a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+							break
+						}
+
+						fallthrough
+					case 'I':
+						res := a.searchDrawer.FocusedResult()
+						if res == "" {
+							break
+						}
+
+						a.queue = append([]*track.Track{{Path: res}}, a.queue...)
+						*a.shuffleIdx++
+						a.playQueueTop()
+						if a.paused {
+							a.paused = false
+							a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
+						}
+						a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+						a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+					}
 				}
 
 				switch ev.Rune() {
@@ -422,6 +456,14 @@ func (a *app) loop() error {
 
 		a.screen.Show()
 	}
+}
+
+func (a *app) typing() bool {
+	return a.switchableDrawer.Tab == types.TabSearch && a.searchDrawer.ResultsIdx == 0
+}
+
+func (a *app) searching() bool {
+	return a.switchableDrawer.Tab == types.TabSearch
 }
 
 func (a *app) queueFocusShift(i int) {
@@ -664,7 +706,6 @@ func (a *app) skipLocked(r types.Repeat) {
 	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
 }
 
-// callers are required to verify that queue[0] exists
 func (a *app) playQueueTop() {
 	speaker.Lock()
 	a.playQueueTopLocked()

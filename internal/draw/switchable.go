@@ -9,16 +9,16 @@ type SwitchableDrawer struct {
 	scope
 }
 
-func (s *SwitchableDrawer) Cycle() (types.Tab, error) {
+func (s *SwitchableDrawer) Cycle() error {
 	if len(s.Drawers) > 1 {
 		if clearer, ok := s.Drawers[s.Tab].(Clearer); ok {
 			if err := clearer.Clear(); err != nil {
-				return 0, err
+				return err
 			}
 		}
 	}
 	s.Tab = types.Tab((int(s.Tab) + 1) % len(s.Drawers))
-	return s.Tab, s.Draw()
+	return s.Draw()
 }
 
 func (s *SwitchableDrawer) Draw() error {

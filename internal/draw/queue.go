@@ -65,4 +65,8 @@ func (q *QueueDrawer) Draw() error {
 	return nil
 }
 
+func (q *QueueDrawer) Height() int {
+	return q.h
+}
+
 var _ Drawer = &QueueDrawer{}

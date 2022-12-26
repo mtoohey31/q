@@ -18,7 +18,7 @@ type SearchDrawer struct {
 	query, prevQuery string
 	queryIdx         int // index of cursor within query text
 
-	resultsIdx int // 0 means typing, nothing focused
+	ResultsIdx int // 0 means typing, nothing focused
 	results    []string
 
 	scope
@@ -31,13 +31,13 @@ func (s *SearchDrawer) Clear() error {
 }
 
 func (s *SearchDrawer) ShiftFocus(i int) error {
-	newIdx := s.resultsIdx + i
+	newIdx := s.ResultsIdx + i
 	if newIdx < 0 {
 		newIdx = 0
 	}
 	// values that are too large will be caught by draw since the length of the
 	// results may have changed anyways
-	s.resultsIdx = newIdx
+	s.ResultsIdx = newIdx
 	return s.Draw()
 }
 
@@ -62,8 +62,8 @@ func (s *SearchDrawer) Draw() error {
 		}
 		s.prevQuery = s.query
 
-		if s.resultsIdx > len(s.results) {
-			s.resultsIdx = len(s.results)
+		if s.ResultsIdx > len(s.results) {
+			s.ResultsIdx = len(s.results)
 		}
 	}
 
@@ -79,7 +79,7 @@ func (s *SearchDrawer) Draw() error {
 		}
 
 		style := tcell.StyleDefault
-		if y == s.resultsIdx {
+		if y == s.ResultsIdx {
 			style = style.Background(tcell.ColorYellow).Foreground(tcell.ColorBlack)
 		}
 		s.d(0, y, ' ', style)
@@ -98,11 +98,11 @@ func (s *SearchDrawer) Draw() error {
 }
 
 func (s *SearchDrawer) FocusedResult() string {
-	if s.resultsIdx == 0 {
+	if s.ResultsIdx == 0 {
 		return ""
 	}
 
-	return s.results[s.resultsIdx-1]
+	return s.results[s.ResultsIdx-1]
 }
 
 func (s *SearchDrawer) Backspace() error {
