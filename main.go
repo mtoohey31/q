@@ -47,13 +47,13 @@ func loadConfig() ([]string, error) {
 }
 
 type appOptions struct {
-	Shuffle        bool         `short:"s" negatable:"true" default:"true"`
-	Repeat         types.Repeat `short:"r" default:"queue"`
-	InitialTab     types.Tab    `short:"i" default:"metadata"`
-	SampleRate     uint         `short:"t" default:"44100"`
-	MusicDir       string       `short:"m" default:"." type:"path"`
-	ScrollOff      int          `short:"o" default:"7"`
-	InitialQueries []string     `arg:"" optional:"true"`
+	Shuffle        bool         `short:"s" negatable:"true" default:"true" help:"Initial shuffle mode."`
+	Repeat         types.Repeat `short:"r" default:"queue" help:"Initial repeat mode."`
+	InitialTab     types.Tab    `short:"i" default:"metadata" help:"Tab to display first."`
+	SampleRate     uint         `short:"t" default:"44100" help:"Sample rate to use for the player as a whole. Audio files with different sample rates will be resampled."`
+	MusicDir       string       `short:"m" default:"." type:"path" help:"Directory containing music files."`
+	ScrollOff      int          `short:"o" default:"7" help:"Lines of padding from the cursor to the edge of the screen when scrolling."`
+	InitialQueries []string     `arg:"" optional:"true" help:"Queries whose results will become the initial queue."`
 }
 
 func main() {
