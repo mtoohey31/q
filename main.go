@@ -18,6 +18,11 @@ import (
 // TODO: fix rendering bugs, can be reproduced by opening a large queue then
 // holding down the remove from queue button
 
+// TODO: add health check subcommand that prints supported file formats for
+// playback and metadata
+
+// TODO: add support for listening on and sending commands to a socket
+
 func loadConfig() ([]string, error) {
 	cfgHome, ok := os.LookupEnv("XDG_CONFIG_HOME")
 	if !ok {
