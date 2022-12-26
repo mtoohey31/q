@@ -5,9 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"mtoohey.com/q/internal/types"
+
 	"github.com/faiface/beep"
 	"github.com/gdamore/tcell/v2"
-	"mtoohey.com/q/internal/types"
 )
 
 type runeStylePair struct {

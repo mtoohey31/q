@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/gdamore/tcell/v2"
 	"mtoohey.com/q/internal/track"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 type MetadataDrawer struct {

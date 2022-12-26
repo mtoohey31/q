@@ -5,9 +5,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"mtoohey.com/q/internal/query"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
-	"mtoohey.com/q/internal/query"
 )
 
 type SearchDrawer struct {

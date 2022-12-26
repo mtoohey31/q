@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"mtoohey.com/q/internal/types"
+
 	"github.com/alecthomas/kong"
 	"github.com/faiface/beep/speaker"
-	"mtoohey.com/q/internal/types"
 )
 
 // TODO: fix rendering bugs, can be reproduced by opening a large queue then
