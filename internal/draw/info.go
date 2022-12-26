@@ -12,7 +12,7 @@ type InfoDynWDrawer struct {
 	Queue *[]*track.Track
 }
 
-func (i *InfoDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
+func (i *InfoDynWDrawer) dynWDraw(d drawFunc, maxW, _ int) (w int, err error) {
 	if len(*i.Queue) == 0 {
 		return -1, nil
 	}

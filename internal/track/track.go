@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	//revive:disable this is necessary for image
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	//revive:enable
 	"os"
 	"path/filepath"
 	"sync"

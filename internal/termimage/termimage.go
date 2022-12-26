@@ -36,9 +36,9 @@ import (
 	"strings"
 )
 
-// TerminalUnsupported is an error indicating that the current terminal is not
+// ErrTerminalUnsupported is an error indicating that the current terminal is not
 // supported.
-var TerminalUnsupported = fmt.Errorf("terminal unsupported")
+var ErrTerminalUnsupported = fmt.Errorf("terminal unsupported")
 
 // WriteImage writes the image m to w, using whatever protocol is detected as
 // supported by the current terminal.
@@ -52,7 +52,7 @@ func WriteImage(w io.Writer, m image.Image, r image.Rectangle) error {
 	// TODO: support iterm and others
 
 	if strings.ToLower(os.Getenv("TERM")) != "xterm-kitty" {
-		return TerminalUnsupported
+		return ErrTerminalUnsupported
 	}
 
 	var buf bytes.Buffer
@@ -106,7 +106,7 @@ func WriteImage(w io.Writer, m image.Image, r image.Rectangle) error {
 // error TerminalUnsupported is returned.
 func ClearImages(w io.Writer) error {
 	if strings.ToLower(os.Getenv("TERM")) != "xterm-kitty" {
-		return TerminalUnsupported
+		return ErrTerminalUnsupported
 	}
 
 	_, err := fmt.Fprint(w, "\x1b_Ga=d;\x1b\\")

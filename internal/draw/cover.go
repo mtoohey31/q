@@ -30,7 +30,7 @@ type CoverDynWDrawer struct {
 func (c *CoverDynWDrawer) Clear() error {
 	err := termimage.ClearImages(os.Stdout)
 	if err != nil {
-		if errors.Is(err, termimage.TerminalUnsupported) {
+		if errors.Is(err, termimage.ErrTerminalUnsupported) {
 			return nil
 		}
 
@@ -78,7 +78,7 @@ func (c *CoverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 
 	err = termimage.WriteImage(os.Stdout, cover, image.Rect(0, c.AbsHeight()-h, w, c.AbsHeight()-h+imageH))
 	if err != nil {
-		if errors.Is(err, termimage.TerminalUnsupported) {
+		if errors.Is(err, termimage.ErrTerminalUnsupported) {
 			return -1, nil
 		}
 
