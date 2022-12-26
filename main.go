@@ -14,6 +14,9 @@ import (
 	"mtoohey.com/q/internal/types"
 )
 
+// TODO: fix rendering bugs, can be reproduced by opening a large queue then
+// holding down the remove from queue button
+
 func loadConfig() ([]string, error) {
 	cfgHome, ok := os.LookupEnv("XDG_CONFIG_HOME")
 	if !ok {

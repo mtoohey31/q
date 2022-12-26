@@ -41,7 +41,6 @@ func (s *SearchDrawer) Draw() error {
 
 	x := drawString(s.d, s.w, s.String(), tcell.StyleDefault.Underline(true))
 
-	// TODO: test this
 	s.Screen.ShowCursor(w/3+1+x, 0)
 	s.Screen.SetCursorStyle(tcell.CursorStyleSteadyBar)
 
