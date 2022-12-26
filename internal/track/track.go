@@ -139,6 +139,8 @@ func (t *Track) initFormat() {
 		case bytes.Compare(magic[:8], []byte("ftypisom")) == 0:
 			t.format = formatMp4
 		default:
+			// TODO: surface this to the user as a warning instead of making
+			// it something fatal that can stop the program
 			t.formatErr = fmt.Errorf("unknown format with magic: %v", magic)
 		}
 	})
