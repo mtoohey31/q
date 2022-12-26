@@ -379,7 +379,11 @@ func (a *app) loop() error {
 							}
 							a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 						}
+
 					case 'i':
+						// TODO: make the location that the track gets inserted
+						// dependent on the focused index
+
 						res := a.searchDrawer.FocusedResult()
 						if res == "" {
 							break
