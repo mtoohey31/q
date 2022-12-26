@@ -46,6 +46,10 @@ func (c *CoverDynWDrawer) Clear() error {
 
 func (c *CoverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 	if len(*c.Queue) == 0 {
+		if c.prevCover != nil {
+			return -1, c.Clear()
+		}
+
 		return -1, nil
 	}
 
