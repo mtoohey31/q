@@ -1,6 +1,7 @@
 package draw
 
 import (
+	"image"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -30,7 +31,7 @@ func (s *SearchDrawer) Clear() error {
 	return nil
 }
 
-func (s *SearchDrawer) ShiftFocus(i int) error {
+func (s *SearchDrawer) ShiftFocus(d drawFunc, i int) error {
 	newIdx := s.ResultsIdx + i
 	if newIdx < 0 {
 		newIdx = 0
@@ -38,20 +39,19 @@ func (s *SearchDrawer) ShiftFocus(i int) error {
 	// values that are too large will be caught by draw since the length of the
 	// results may have changed anyways
 	s.ResultsIdx = newIdx
-	return s.Draw()
+	return s.Draw(d)
 }
 
-func (s *SearchDrawer) Draw() error {
+func (s *SearchDrawer) Draw(d drawFunc) error {
 	w, _ := s.Screen.Size()
 
-	// TODO: this uses knowledge of its absolute position
-	s.Screen.ShowCursor(w/3+1+runewidth.StringWidth(s.query[:s.queryIdx]), 0)
+	s.Screen.ShowCursor(s.Min.X+runewidth.StringWidth(s.query[:s.queryIdx]), s.Min.Y)
 	s.Screen.SetCursorStyle(tcell.CursorStyleSteadyBar)
 
-	x := drawString(s.d, s.w, s.query, tcell.StyleDefault.Underline(true))
+	x := drawString(d, s.Min, s.Max.X, s.query, tcell.StyleDefault.Underline(true))
 
 	for ; x < w; x++ {
-		s.d(x, 0, ' ', tcell.StyleDefault.Underline(true))
+		d(image.Pt(x, s.Min.Y), ' ', tcell.StyleDefault.Underline(true))
 	}
 
 	if s.query != s.prevQuery || s.results == nil {
@@ -69,7 +69,7 @@ func (s *SearchDrawer) Draw() error {
 
 	y := 1
 	for _, line := range s.results {
-		if y >= s.h {
+		if y >= s.Dy() {
 			break
 		}
 
@@ -82,17 +82,20 @@ func (s *SearchDrawer) Draw() error {
 		if y == s.ResultsIdx {
 			style = style.Background(tcell.ColorYellow).Foreground(tcell.ColorBlack)
 		}
-		s.d(0, y, ' ', style)
-		x := drawString(offset(s.d, 1, y), s.w-2, line, style)
-		for x++; x < s.w; x++ {
-			s.d(x, y, ' ', style)
+		d(s.Min.Add(image.Pt(0, y)), ' ', style)
+		x := drawString(d, s.Min.Add(image.Pt(1, y)), s.Max.X-1, line, style)
+		for ; x < s.Max.X; x++ {
+			d(image.Pt(x, y), ' ', style)
 		}
 		y++
 	}
-
-	if y < s.h {
-		clear(offset(s.d, 0, y), s.w, s.h-y)
-	}
+	clear(d, image.Rectangle{
+		Min: image.Point{
+			X: s.Min.X,
+			Y: s.Min.Y + y,
+		},
+		Max: s.Max,
+	})
 
 	return nil
 }
@@ -105,7 +108,7 @@ func (s *SearchDrawer) FocusedResult() string {
 	return s.results[s.ResultsIdx-1]
 }
 
-func (s *SearchDrawer) Backspace() error {
+func (s *SearchDrawer) Backspace(d drawFunc) error {
 	_, size := utf8.DecodeLastRuneInString(s.query)
 	if size == 0 {
 		return nil
@@ -113,10 +116,10 @@ func (s *SearchDrawer) Backspace() error {
 
 	s.query = s.query[:len(s.query)-size]
 	s.queryIdx = len(s.query)
-	return s.Draw()
+	return s.Draw(d)
 }
 
-func (s *SearchDrawer) Insert(r rune) error {
+func (s *SearchDrawer) Insert(d drawFunc, r rune) error {
 	s.query = strings.Join([]string{
 		s.query[:s.queryIdx],
 		string(r),
@@ -124,20 +127,20 @@ func (s *SearchDrawer) Insert(r rune) error {
 	}, "")
 	s.queryIdx += len(string(r))
 
-	return s.Draw()
+	return s.Draw(d)
 }
 
-func (s *SearchDrawer) ToStart() error {
+func (s *SearchDrawer) ToStart(d drawFunc) error {
 	if s.queryIdx == 0 {
 		return nil
 	}
 
 	s.queryIdx = 0
 
-	return s.Draw()
+	return s.Draw(d)
 }
 
-func (s *SearchDrawer) ToEnd() error {
+func (s *SearchDrawer) ToEnd(d drawFunc) error {
 	queryLen := len(s.query)
 	if s.queryIdx == queryLen {
 		return nil
@@ -145,14 +148,14 @@ func (s *SearchDrawer) ToEnd() error {
 
 	s.queryIdx = queryLen
 
-	return s.Draw()
+	return s.Draw(d)
 }
 
 // NOTE: Left and Right assume that the utf8 package won't return something
 // nonsensical that makes us jump the cursor out of range. This should be
 // safe... hopefully...
 
-func (s *SearchDrawer) Left() error {
+func (s *SearchDrawer) Left(d drawFunc) error {
 	if s.queryIdx == 0 {
 		return nil
 	}
@@ -160,10 +163,10 @@ func (s *SearchDrawer) Left() error {
 	_, size := utf8.DecodeLastRuneInString(s.query[:s.queryIdx])
 	s.queryIdx -= size
 
-	return s.Draw()
+	return s.Draw(d)
 }
 
-func (s *SearchDrawer) Right() error {
+func (s *SearchDrawer) Right(d drawFunc) error {
 	if s.queryIdx == len(s.query) {
 		return nil
 	}
@@ -171,10 +174,10 @@ func (s *SearchDrawer) Right() error {
 	_, size := utf8.DecodeRuneInString(s.query[s.queryIdx:])
 	s.queryIdx += size
 
-	return s.Draw()
+	return s.Draw(d)
 }
 
-func (s *SearchDrawer) KillWord() error {
+func (s *SearchDrawer) KillWord(d drawFunc) error {
 	if s.query == "" {
 		return nil
 	}
@@ -193,7 +196,7 @@ func (s *SearchDrawer) KillWord() error {
 	_, size := utf8.DecodeRuneInString(s.query[s.queryIdx:])
 	s.queryIdx += size
 
-	return s.Draw()
+	return s.Draw(d)
 }
 
 var _ DrawClearer = &SearchDrawer{}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"math/rand"
 	"time"
@@ -204,13 +205,7 @@ func newApp(options appOptions) (a *app, err error) {
 		ScrollOff:     options.ScrollOff,
 	}
 
-	a.coverDrawer = &draw.CoverDynWDrawer{
-		Queue: &a.queue,
-		AbsHeight: func() int {
-			_, h := a.screen.Size()
-			return h
-		},
-	}
+	a.coverDrawer = &draw.CoverDynWDrawer{Queue: &a.queue}
 
 	a.searchDrawer = &draw.SearchDrawer{
 		Screen:   a.screen,
@@ -254,6 +249,10 @@ func newApp(options appOptions) (a *app, err error) {
 	return a, nil
 }
 
+func (a *app) drawFunc(p image.Point, r rune, s tcell.Style) {
+	a.screen.SetContent(p.X, p.Y, r, nil, s)
+}
+
 func (a *app) loop() error {
 	// we don't draw to start, because we get a resize event on startup, which
 	// causes the first draw
@@ -268,7 +267,7 @@ func (a *app) loop() error {
 					time.Sleep(time.Second)
 					if a.warning == e {
 						a.warning = nil
-						a.progressDrawer.DrawWarning()
+						a.progressDrawer.DrawWarning(a.drawFunc)
 						a.screen.Show()
 					}
 				}(w.err)
@@ -279,13 +278,16 @@ func (a *app) loop() error {
 
 		case *tcell.EventResize:
 			w, h := ev.Size()
-			a.rootDrawer.SetScope(func(x, y int, r rune, s tcell.Style) {
-				a.screen.SetContent(x, y, r, nil, s)
-			}, w, h)
+			a.rootDrawer.SetScope(image.Rectangle{
+				Max: image.Point{
+					X: w,
+					Y: h,
+				},
+			})
 			a.fatalfIf(a.coverDrawer.Clear(), "cover clear failed")
-			if !a.fatalfIf(a.rootDrawer.Draw(), "root draw failed") &&
+			if !a.fatalfIf(a.rootDrawer.Draw(a.drawFunc), "root draw failed") &&
 				a.streamSeekCloser != nil && !a.paused {
-				a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
+				a.progressDrawer.SpawnProgressDrawers(a.drawFunc, a.screen.Show)
 			}
 
 		case *tcell.EventKey:
@@ -295,43 +297,43 @@ func (a *app) loop() error {
 
 			case tcell.KeyLeft:
 				if a.typing() {
-					a.fatalfIf(a.searchDrawer.Left(), "search left failed")
+					a.fatalfIf(a.searchDrawer.Left(a.drawFunc), "search left failed")
 				} else {
 					a.seekBy(time.Second * -5)
 				}
 
 			case tcell.KeyRight:
 				if a.typing() {
-					a.fatalfIf(a.searchDrawer.Right(), "search right failed")
+					a.fatalfIf(a.searchDrawer.Right(a.drawFunc), "search right failed")
 				} else {
 					a.seekBy(time.Second * 5)
 				}
 
 			case tcell.KeyHome, tcell.KeyCtrlA:
 				if a.typing() {
-					a.fatalfIf(a.searchDrawer.ToStart(), "search to start failed")
+					a.fatalfIf(a.searchDrawer.ToStart(a.drawFunc), "search to start failed")
 				}
 
 			case tcell.KeyEnd, tcell.KeyCtrlE:
 				if a.typing() {
-					a.fatalfIf(a.searchDrawer.ToEnd(), "search to end failed")
+					a.fatalfIf(a.searchDrawer.ToEnd(a.drawFunc), "search to end failed")
 				}
 
 			case tcell.KeyCtrlW:
 				if a.typing() {
-					a.fatalfIf(a.searchDrawer.KillWord(), "search kill word failed")
+					a.fatalfIf(a.searchDrawer.KillWord(a.drawFunc), "search kill word failed")
 				}
 
 			case tcell.KeyDown:
 				if a.searching() {
-					a.fatalfIf(a.searchDrawer.ShiftFocus(1), "search shift focus failed")
+					a.fatalfIf(a.searchDrawer.ShiftFocus(a.drawFunc, 1), "search shift focus failed")
 				} else {
 					a.queueFocusShift(1)
 				}
 
 			case tcell.KeyUp:
 				if a.searching() {
-					a.fatalfIf(a.searchDrawer.ShiftFocus(-1), "search shift focus failed")
+					a.fatalfIf(a.searchDrawer.ShiftFocus(a.drawFunc, -1), "search shift focus failed")
 				} else {
 					a.queueFocusShift(-1)
 				}
@@ -350,23 +352,23 @@ func (a *app) loop() error {
 
 			case tcell.KeyEnter:
 				if a.typing() && a.searchDrawer.ResultsIdx == 0 {
-					a.fatalfIf(a.searchDrawer.ShiftFocus(1), "search shift focus failed")
+					a.fatalfIf(a.searchDrawer.ShiftFocus(a.drawFunc, 1), "search shift focus failed")
 				} else if !a.searching() {
 					a.jumpFocused()
 				}
 
 			case tcell.KeyTAB:
-				a.fatalfIf(a.switchableDrawer.Cycle(), "cycle failed")
+				a.fatalfIf(a.switchableDrawer.Cycle(a.drawFunc), "cycle failed")
 
 			case tcell.KeyBackspace2:
 				if !a.typing() {
 					break
 				}
-				a.fatalfIf(a.searchDrawer.Backspace(), "search backspace failed")
+				a.fatalfIf(a.searchDrawer.Backspace(a.drawFunc), "search backspace failed")
 
 			case tcell.KeyRune:
 				if a.typing() {
-					a.fatalfIf(a.searchDrawer.Insert(ev.Rune()), "search insert failed")
+					a.fatalfIf(a.searchDrawer.Insert(a.drawFunc, ev.Rune()), "search insert failed")
 					break
 				} else if a.searching() {
 					switch ev.Rune() {
@@ -375,9 +377,9 @@ func (a *app) loop() error {
 							a.queue = append(a.queue, &track.Track{Path: res})
 							if len(a.queue) == 1 {
 								a.playQueueTop()
-								a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+								a.fatalfIf(a.bottomDrawer.Draw(a.drawFunc), "bottom draw failed")
 							}
-							a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+							a.fatalfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
 						}
 
 					case 'i':
@@ -394,7 +396,7 @@ func (a *app) loop() error {
 							if a.shuffleIdx != nil {
 								*a.shuffleIdx++
 							}
-							a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+							a.fatalfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
 							break
 						}
 
@@ -413,10 +415,10 @@ func (a *app) loop() error {
 						a.playQueueTop()
 						if !wasPlaying {
 							a.paused = false
-							a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
+							a.progressDrawer.SpawnProgressDrawers(a.drawFunc, a.screen.Show)
 						}
-						a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
-						a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+						a.fatalfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
+						a.fatalfIf(a.bottomDrawer.Draw(a.drawFunc), "bottom draw failed")
 					}
 				}
 
@@ -497,7 +499,7 @@ func (a *app) queueFocusShift(i int) {
 	a.queueFocusIdx = newIdx
 
 	if i != 0 {
-		a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+		a.fatalfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
 	}
 }
 
@@ -520,11 +522,11 @@ func (a *app) paste(before bool) {
 
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
-		a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-		a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
-		a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
+		a.fatalfIf(a.bottomDrawer.Draw(a.drawFunc), "bottom draw failed")
+		a.fatalfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabMetadata), "metadata draw failed")
+		a.fatalfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabLyrics), "lyrics draw failed")
 	}
-	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+	a.fatalfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
 }
 
 func (a *app) removeFocused() {
@@ -542,16 +544,16 @@ func (a *app) removeFocused() {
 
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
-		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-		a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
-		a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
+		a.warnfIf(a.bottomDrawer.Draw(a.drawFunc), "bottom draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabMetadata), "metadata draw failed")
+		a.warnfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabLyrics), "lyrics draw failed")
 	}
 
 	if a.queueFocusIdx >= len(a.queue) {
 		a.queueFocusIdx = len(a.queue) - 1
 	}
 
-	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
+	a.warnfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
 }
 
 func (a *app) clearQueue() {
@@ -562,11 +564,11 @@ func (a *app) clearQueue() {
 	a.queue = nil
 
 	a.playQueueTop()
-	a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
+	a.warnfIf(a.bottomDrawer.Draw(a.drawFunc), "bottom draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabMetadata), "metadata draw failed")
+	a.warnfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabLyrics), "lyrics draw failed")
 
-	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
+	a.warnfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
 }
 
 func (a *app) jumpFocused() {
@@ -581,10 +583,10 @@ func (a *app) jumpFocused() {
 			speaker.Unlock()
 		}
 		if wasPaused {
-			a.progressDrawer.DrawPause()
-			a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
+			a.progressDrawer.DrawPause(a.drawFunc)
+			a.progressDrawer.SpawnProgressDrawers(a.drawFunc, a.screen.Show)
 		}
-		a.progressDrawer.DrawBar()
+		a.progressDrawer.DrawBar(a.drawFunc)
 
 		return
 	}
@@ -615,32 +617,32 @@ func (a *app) jumpFocused() {
 		speaker.Lock()
 		a.paused = false
 		speaker.Unlock()
-		a.progressDrawer.DrawPause()
-		a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
+		a.progressDrawer.DrawPause(a.drawFunc)
+		a.progressDrawer.SpawnProgressDrawers(a.drawFunc, a.screen.Show)
 	}
 
-	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
-	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
-	a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
+	a.fatalfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
+	a.fatalfIf(a.bottomDrawer.Draw(a.drawFunc), "bottom draw failed")
+	a.fatalfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabMetadata), "metadata draw failed")
+	a.fatalfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabLyrics), "lyrics draw failed")
 }
 
 func (a *app) cyclePause() {
 	speaker.Lock()
 	a.paused = !a.paused
 	speaker.Unlock()
-	a.progressDrawer.DrawPause()
+	a.progressDrawer.DrawPause(a.drawFunc)
 	if a.paused {
 		a.progressDrawer.CancelProgressDrawers()
-		a.progressDrawer.DrawBar()
+		a.progressDrawer.DrawBar(a.drawFunc)
 	} else if len(a.queue) > 0 {
-		a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
+		a.progressDrawer.SpawnProgressDrawers(a.drawFunc, a.screen.Show)
 	}
 }
 
 func (a *app) cycleRepeat() {
 	a.repeat = (a.repeat + 1) % 3
-	a.progressDrawer.DrawRepeat()
+	a.progressDrawer.DrawRepeat(a.drawFunc)
 }
 
 func (a *app) cycleShuffle() {
@@ -650,7 +652,7 @@ func (a *app) cycleShuffle() {
 	} else {
 		a.shuffleIdx = nil
 	}
-	a.progressDrawer.DrawShuffle()
+	a.progressDrawer.DrawShuffle(a.drawFunc)
 }
 
 func shuffle[T any](s []T) {
@@ -678,7 +680,7 @@ func (a *app) reshuffle() {
 		shuffle(a.queue[*a.shuffleIdx:])
 	}
 
-	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+	a.fatalfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
 }
 
 func (a *app) skip() {
@@ -735,10 +737,10 @@ func (a *app) skipLocked(r types.Repeat) {
 
 	a.playQueueTopLocked()
 
-	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
-	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
-	a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
+	a.fatalfIf(a.queueDrawer.Draw(a.drawFunc), "queue draw failed")
+	a.fatalfIf(a.bottomDrawer.Draw(a.drawFunc), "bottom draw failed")
+	a.fatalfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabMetadata), "metadata draw failed")
+	a.fatalfIf(a.switchableDrawer.DrawIfVisible(a.drawFunc, types.TabLyrics), "lyrics draw failed")
 }
 
 func (a *app) playQueueTop() {
@@ -784,7 +786,7 @@ func (a *app) seekBy(d time.Duration) {
 	a.warnfIf(a.streamSeekCloser.Seek(newP), "failed to seekBy")
 	speaker.Unlock()
 
-	a.progressDrawer.DrawBar()
+	a.progressDrawer.DrawBar(a.drawFunc)
 }
 
 func (a *app) seekPercent(p float32) {
@@ -795,5 +797,5 @@ func (a *app) seekPercent(p float32) {
 	a.warnfIf(a.streamSeekCloser.Seek(int(float32(a.streamSeekCloser.Len())*p)), "failed to seekPercent")
 	speaker.Unlock()
 
-	a.progressDrawer.DrawBar()
+	a.progressDrawer.DrawBar(a.drawFunc)
 }

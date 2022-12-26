@@ -1,26 +1,30 @@
 package draw
 
-// TODO: rework things so that drawers know there absolute positions on the
-// screen so I don't have to get into wierd hacks with drawers that can't use
-// drawFunc
+import (
+	"image"
 
-// Drawer draws to the screen, taking up a fixed box.
+	"github.com/gdamore/tcell/v2"
+)
+
+type drawFunc func(p image.Point, r rune, s tcell.Style)
+
+// Drawer draws to the screen, taking up a fixed rectangle.
 type Drawer interface {
-	// setScope sets the scope of this drawer to be the box from x=0..w and
-	// y=0..h (both non-inclusive), which should be filled using d.
-	setScope(d drawFunc, w, h int)
+	// setScope sets area that this drawer should draw to.
+	setScope(image.Rectangle)
 
-	// Draw fills the box specified by setScope. It must fill the entire box,
-	// since no guarantees are made about the box's prior contents.
-	Draw() error
+	// Draw fills the rectangle specified by setScope. It must fill the entire
+	// rectangle, since no guarantees are made about the prior contents.
+	Draw(d drawFunc) error
 }
 
+// SetScope allows a scope to be set.
 type SetScoper interface {
-	// setScope sets the scope of this drawer to be the box from x=0..w and
-	// y=0..h (both non-inclusive), which should be filled using d.
-	SetScope(d drawFunc, w, h int)
+	// SetScope sets area that this drawer should draw to.
+	SetScope(image.Rectangle)
 }
 
+// Clearer can clear the area previously drawn to.
 type Clearer interface {
 	// Clear clears the previous draw.
 	Clear() error
@@ -38,17 +42,16 @@ type DrawClearer interface {
 
 // DynWDrawer draws to the screen, taking up a fixed height but variable width.
 type DynWDrawer interface {
-	// dynWDraw fills the box from x value 0..w where w <= maxW and y value
-	// 0..h (both non-inclusive) by calling d. It is the caller's responsibility
-	// to fill the range w..maxW.
-	dynWDraw(d drawFunc, maxW, h int) (w int, err error)
+	// setScope sets area that this drawer can draw to.
+	setScope(image.Rectangle)
+
+	// dynWDraw fills at most the rectangle specified by setScope. It returns
+	// stopX, the x value before which it filled all columns within the
+	// rectangle.
+	dynWDraw(d drawFunc) (stopX int, err error)
 }
 
-// DynWDrawClearer draws to the screen, taking up a fixed height but variable
-// width. It can also be cleared.
 type DynWDrawClearer interface {
 	DynWDrawer
 	Clearer
 }
-
-var _ DynWDrawer = DynWDrawClearer(nil)

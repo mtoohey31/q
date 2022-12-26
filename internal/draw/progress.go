@@ -1,6 +1,7 @@
 package draw
 
 import (
+	"image"
 	"math"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/faiface/beep"
 	"github.com/gdamore/tcell/v2"
+	"github.com/mattn/go-runewidth"
 )
 
 type runeStylePair struct {
@@ -30,6 +32,7 @@ type ProgressDrawer struct {
 	Warning          *error
 
 	cancelDrawers chan struct{}
+
 	scope
 }
 
@@ -63,24 +66,24 @@ func NewProgressDrawer(canDisplay func(rune) bool) *ProgressDrawer {
 	return &p
 }
 
-func (p *ProgressDrawer) DrawPause() {
+func (p *ProgressDrawer) DrawPause(d drawFunc) {
 	s := tcell.StyleDefault
 	if *p.Paused || *p.StreamSeekCloser == nil {
 		s = s.Dim(true)
 	}
-	p.scope.d((p.scope.w)/2, 0, p.pausedRMap[*p.Paused], s)
+	d(p.Min.Add(image.Pt(p.Dx()/2, 0)), p.pausedRMap[*p.Paused], s)
 }
 
-func (p *ProgressDrawer) DrawRepeat() {
-	p.scope.d(p.scope.w/2+5, 0, p.repeatRSMap[*p.Repeat].r, p.repeatRSMap[*p.Repeat].s)
+func (p *ProgressDrawer) DrawRepeat(d drawFunc) {
+	d(p.Min.Add(image.Pt(p.Dx()/2+5, 0)), p.repeatRSMap[*p.Repeat].r, p.repeatRSMap[*p.Repeat].s)
 }
 
-func (p *ProgressDrawer) DrawShuffle() {
+func (p *ProgressDrawer) DrawShuffle(d drawFunc) {
 	s := tcell.StyleDefault
 	if *p.ShuffleIdx == nil {
 		s = s.Dim(true)
 	}
-	p.scope.d(p.scope.w/2-5, 0, p.shuffleR, s)
+	d(p.Min.Add(image.Pt(p.Dx()/2-5, 0)), p.shuffleR, s)
 }
 
 func (p *ProgressDrawer) widths() (dW, barW int) {
@@ -109,12 +112,12 @@ func (p *ProgressDrawer) widths() (dW, barW int) {
 		dW += int(math.Floor(math.Log10(float64(totalD/time.Hour)))) + 2
 	}
 
-	return dW, p.scope.w - (2*dW + 2)
+	return dW, p.Dx() - (2*dW + 2)
 }
 
-func (p *ProgressDrawer) DrawBar() {
+func (p *ProgressDrawer) DrawBar(d drawFunc) {
 	if *p.StreamSeekCloser == nil {
-		clear(offset(p.d, 0, 1), p.w, 1)
+		clear(d, image.Rect(p.Min.X, p.Min.Y+1, p.Max.X, p.Min.Y+2))
 
 		return
 	}
@@ -128,12 +131,12 @@ func (p *ProgressDrawer) DrawBar() {
 	currS = strings.Repeat(" ", dW-len(currS)) + currS
 	totalS = strings.Repeat(" ", dW-len(totalS)) + totalS
 
-	drawString(offset(p.scope.d, 0, 1), -1, currS, tcell.StyleDefault)
-	p.scope.d(dW, 1, '|', tcell.StyleDefault)
+	drawString(d, p.Min.Add(image.Pt(0, 1)), p.Max.X, currS, tcell.StyleDefault)
+	d(p.Min.Add(image.Pt(dW, 1)), '|', tcell.StyleDefault)
 
 	progress := float64(currD) / float64(totalD)
 	barCompleteW := int(progress * float64(barW))
-	drawString(offset(p.scope.d, dW+1, 1), -1, strings.Repeat("█", barCompleteW), tcell.StyleDefault)
+	drawString(d, p.Min.Add(image.Pt(dW+1, 1)), p.Max.X, strings.Repeat("█", barCompleteW), tcell.StyleDefault)
 
 	if barCompleteW > barW {
 		barCompleteW = barW
@@ -143,17 +146,17 @@ func (p *ProgressDrawer) DrawBar() {
 		// the fractional part of a box not drawn, should be between 0 and 1
 		remainder := progress*float64(barW) - float64(barCompleteW)
 		partialBoxes := [8]rune{' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'}
-		p.scope.d(dW+1+barCompleteW, 1, partialBoxes[int(remainder*8)], tcell.StyleDefault)
+		d(image.Pt(p.Min.X+dW+1+barCompleteW, p.Min.Y+1), partialBoxes[int(remainder*8)], tcell.StyleDefault)
 
-		drawString(offset(p.d, dW+1+barCompleteW+1, 1), -1,
+		drawString(d, p.Min.Add(image.Pt(dW+1+barCompleteW+1, 1)), p.Max.X,
 			strings.Repeat(" ", barW-barCompleteW-1), tcell.StyleDefault)
 	}
 
-	p.d(p.w-dW-1, 1, '|', tcell.StyleDefault)
-	drawString(offset(p.d, p.w-dW, 1), -1, totalS, tcell.StyleDefault)
+	d(image.Pt(p.Max.X-dW-1, p.Min.Y+1), '|', tcell.StyleDefault)
+	drawString(d, image.Pt(p.Max.X-dW, p.Min.Y+1), p.Max.X, totalS, tcell.StyleDefault)
 }
 
-func (p *ProgressDrawer) SpawnProgressDrawers(show func()) {
+func (p *ProgressDrawer) SpawnProgressDrawers(d drawFunc, show func()) {
 	if p.cancelDrawers != nil {
 		// drawers already running
 		return
@@ -164,7 +167,7 @@ func (p *ProgressDrawer) SpawnProgressDrawers(show func()) {
 	// bar drawer
 	go func() {
 		for {
-			p.DrawBar()
+			p.DrawBar(d)
 			show()
 
 			// the time it takes to draw one fractional section of the bar
@@ -182,7 +185,7 @@ func (p *ProgressDrawer) SpawnProgressDrawers(show func()) {
 	// time drawer
 	go func() {
 		for {
-			p.DrawBar()
+			p.DrawBar(d)
 			show()
 
 			select {
@@ -201,36 +204,51 @@ func (p *ProgressDrawer) CancelProgressDrawers() {
 	}
 }
 
-func (p *ProgressDrawer) DrawWarning() {
-	clear(offset(p.d, 0, 2), p.w, 1)
+func (p *ProgressDrawer) DrawWarning(d drawFunc) {
+	clear(d, image.Rectangle{
+		Min: image.Point{
+			X: p.Min.X,
+			Y: p.Min.Y + 2,
+		},
+		Max: image.Point{
+			X: p.Max.X,
+			Y: p.Max.Y,
+		},
+	})
 
 	if *p.Warning == nil {
 		return
 	}
 
 	warningString := (*p.Warning).Error()
-	warningLen := len(warningString)
+	warningLen := runewidth.StringWidth(warningString)
 
 	style := tcell.StyleDefault.Background(tcell.ColorRed).Foreground(tcell.ColorBlack)
 
-	if warningLen > p.w {
-		drawString(offset(p.d, 0, 2), p.w, warningString, style)
+	if warningLen > p.Dx() {
+		drawString(d, p.Min.Add(image.Pt(0, 2)), p.Max.X, warningString, style)
 		return
 	}
 
-	drawString(offset(p.d, p.w-warningLen, 2), -1, warningString, style)
+	drawString(d, p.Min.Add(image.Pt(p.Dx()-warningLen, 2)), -1, warningString, style)
 }
 
-func (p *ProgressDrawer) Draw() error {
+func (p *ProgressDrawer) Draw(d drawFunc) error {
 	// pause/shuffle/repeat drawers don't clear the top row, so we need to do
 	// it here
-	clear(p.d, p.w, 1)
-	p.DrawPause()
-	p.DrawShuffle()
-	p.DrawRepeat()
+	clear(d, image.Rectangle{
+		Min: p.Min,
+		Max: image.Point{
+			X: p.Max.X,
+			Y: p.Min.Y + 1,
+		},
+	})
+	p.DrawPause(d)
+	p.DrawShuffle(d)
+	p.DrawRepeat(d)
 
-	p.DrawBar()
-	p.DrawWarning()
+	p.DrawBar(d)
+	p.DrawWarning(d)
 
 	return nil
 }

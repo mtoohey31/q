@@ -1,5 +1,7 @@
 package draw
 
+import "image"
+
 // VertFixedBotSplitDrawer draws top and bottom respectively above and below
 // each other, providing bottom with a height of bottomH and top with the
 // remaining vertical space. It draws no lines.
@@ -10,20 +12,31 @@ type VertFixedBotSplitDrawer struct {
 	scope
 }
 
-func (vfbs *VertFixedBotSplitDrawer) SetScope(d drawFunc, w, h int) {
-	vfbs.setScope(d, w, h)
+func (vfbs *VertFixedBotSplitDrawer) SetScope(r image.Rectangle) {
+	vfbs.setScope(r)
 }
 
-func (vfbs *VertFixedBotSplitDrawer) Draw() error {
-	topH := vfbs.h - vfbs.BottomH
-	vfbs.Top.setScope(vfbs.d, vfbs.w, topH)
-	if err := vfbs.Top.Draw(); err != nil {
+func (vfbs *VertFixedBotSplitDrawer) setScope(r image.Rectangle) {
+	vfbs.Rectangle = r
+
+	vfbs.Top.setScope(image.Rectangle{
+		Min: r.Min,
+		Max: r.Max.Sub(image.Pt(0, vfbs.BottomH)),
+	})
+	vfbs.Bottom.setScope(image.Rectangle{
+		Min: image.Point{
+			X: r.Min.X,
+			Y: r.Max.Y - vfbs.BottomH,
+		},
+		Max: r.Max,
+	})
+}
+
+func (vfbs *VertFixedBotSplitDrawer) Draw(d drawFunc) error {
+	if err := vfbs.Top.Draw(d); err != nil {
 		return err
 	}
-
-	vfbs.Bottom.setScope(offset(vfbs.d, 0, topH), vfbs.w, vfbs.BottomH)
-	return vfbs.Bottom.Draw()
+	return vfbs.Bottom.Draw(d)
 }
 
-var _ Drawer = &VertFixedBotSplitDrawer{}
 var _ DrawSetScoper = &VertFixedBotSplitDrawer{}

@@ -1,12 +1,11 @@
 package draw
 
+import "image"
+
 type scope struct {
-	d    drawFunc
-	w, h int
+	image.Rectangle
 }
 
-func (s *scope) setScope(d drawFunc, w, h int) {
-	s.d = d
-	s.w = w
-	s.h = h
+func (s *scope) setScope(r image.Rectangle) {
+	s.Rectangle = r
 }

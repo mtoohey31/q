@@ -1,6 +1,10 @@
 package draw
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"image"
+
+	"github.com/gdamore/tcell/v2"
+)
 
 // HorizRatioSplitDrawer draws left and right next to each other, along with
 // lines between the two, and a line at the bottom.
@@ -9,37 +13,42 @@ import "github.com/gdamore/tcell/v2"
 // with knowledge of where the horizontal split is since there is a joining '┴'
 // in the bottom line.
 type HorizRatioSplitDrawer struct {
-	Ratio       float32
+	Ratio       float64
 	Left, Right Drawer
 
 	scope
 }
 
-func (hrs *HorizRatioSplitDrawer) Draw() error {
-	leftW := int(float32(hrs.w) * hrs.Ratio)
-	// h-1 leaves space for the horizontal line
-	hrs.Left.setScope(hrs.d, leftW, hrs.h-1)
-	if err := hrs.Left.Draw(); err != nil {
+func (hrs *HorizRatioSplitDrawer) setScope(r image.Rectangle) {
+	hrs.Rectangle = r
+
+	leftR := hrs.Rectangle
+	leftR.Max.X = hrs.Min.X + int(float64(hrs.Dx())*hrs.Ratio)
+	leftR.Max.Y-- // account for bottom line
+	hrs.Left.setScope(leftR)
+
+	rightR := hrs.Rectangle
+	rightR.Min.X = leftR.Max.X + 1 // account for middle line
+	rightR.Max.Y--                 // account for bottom line
+	hrs.Right.setScope(rightR)
+}
+
+func (hrs *HorizRatioSplitDrawer) Draw(d drawFunc) error {
+	if err := hrs.Left.Draw(d); err != nil {
 		return err
 	}
 
-	// draw line
-	for y := 0; y < hrs.h-1; y++ {
-		hrs.d(leftW, y, '│', tcell.StyleDefault)
+	// draw lines
+	lineX := hrs.Min.X + int(float64(hrs.Dx())*hrs.Ratio)
+	for c := image.Pt(lineX, hrs.Min.Y); c.Y < hrs.Max.Y-1; c.Y++ {
+		d(c, '│', tcell.StyleDefault)
 	}
-	for x := 0; x < hrs.w; x++ {
-		if x == leftW {
-			continue
-		}
-
-		hrs.d(x, hrs.h-1, '─', tcell.StyleDefault)
+	for c := image.Pt(hrs.Min.X, hrs.Max.Y-1); c.X < hrs.Max.X; c.X++ {
+		d(c, '─', tcell.StyleDefault)
 	}
-	hrs.d(leftW, hrs.h-1, '┴', tcell.StyleDefault)
+	d(image.Pt(lineX, hrs.Max.Y-1), '┴', tcell.StyleDefault)
 
-	rightX := leftW + 1 // leave space for vertical line
-	rightW := hrs.w - rightX
-	hrs.Right.setScope(offset(hrs.d, rightX, 0), rightW, hrs.h-1)
-	return hrs.Right.Draw()
+	return hrs.Right.Draw(d)
 }
 
 var _ Drawer = &HorizDynLimitRatioSplitDrawer{}

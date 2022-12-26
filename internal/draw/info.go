@@ -2,6 +2,7 @@ package draw
 
 import (
 	"fmt"
+	"image"
 
 	"mtoohey.com/q/internal/track"
 
@@ -10,36 +11,40 @@ import (
 
 type InfoDynWDrawer struct {
 	Queue *[]*track.Track
+
+	scope
 }
 
-func (i *InfoDynWDrawer) dynWDraw(d drawFunc, maxW, _ int) (w int, err error) {
+func (i *InfoDynWDrawer) dynWDraw(d drawFunc) (stopX int, err error) {
 	if len(*i.Queue) == 0 {
 		return -1, nil
 	}
 
 	title, err := (*i.Queue)[0].Title()
 	if err != nil {
-		return -1, fmt.Errorf("failed to get title of queue[0]: %w", err)
+		return 0, fmt.Errorf("failed to get title of queue[0]: %w", err)
 	}
 
 	artist, err := (*i.Queue)[0].Artist()
 	if err != nil {
-		return -1, fmt.Errorf("failed to get artist for queue[0]: %w", err)
+		return 0, fmt.Errorf("failed to get artist for queue[0]: %w", err)
 	}
 
-	tW := drawString(d, maxW, title, tcell.StyleDefault)
-	aW := drawString(offset(d, 0, 1), maxW, artist, tcell.StyleDefault.Dim(true))
+	tX := drawString(d, i.Min, i.Max.X, title, tcell.StyleDefault)
+	aX := drawString(d, i.Min.Add(image.Pt(0, 1)), i.Max.X, artist, tcell.StyleDefault.Dim(true))
 
-	w = tW
-	if aW > w {
-		w = aW
+	stopX = tX
+	if aX > stopX {
+		stopX = aX
 	}
 
-	clear(offset(d, tW, 0), w-tW, 1)
-	clear(offset(d, aW, 1), w-aW, 1)
-	clear(offset(d, 0, 2), w, 1)
+	clear(d, image.Rect(tX, i.Min.Y, i.Max.X, i.Min.Y+1))
+	clear(d, image.Rect(aX, i.Min.Y+1, i.Max.X, i.Min.Y+2))
+	bottomClearR := i.Rectangle
+	bottomClearR.Min.Y = i.Min.Y + 2
+	clear(d, bottomClearR)
 
-	return w, nil
+	return stopX, nil
 }
 
 var _ DynWDrawer = &InfoDynWDrawer{}

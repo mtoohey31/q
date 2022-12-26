@@ -1,20 +1,19 @@
 package draw
 
-// FillDrawer fills its whole box with r.
+// FillDrawer fills its whole box with r. It is useful for debugging.
 type FillDrawer struct {
 	R rune
 
 	scope
 }
 
-func (f *FillDrawer) Draw() error {
-	fill(f.d, f.w, f.h, f.R)
+func (f *FillDrawer) Draw(d drawFunc) error {
+	fill(d, f.Rectangle, f.R)
 	return nil
 }
 
-func (f *FillDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
-	fill(d, maxW, h, f.R)
-	return maxW, nil
+func (f *FillDrawer) dynWDraw(d drawFunc) (x int, err error) {
+	return f.Max.X, f.Draw(d)
 }
 
 var _ Drawer = &FillDrawer{}

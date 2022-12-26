@@ -2,6 +2,7 @@ package draw
 
 import (
 	"fmt"
+	"image"
 	"sort"
 
 	"mtoohey.com/q/internal/track"
@@ -15,9 +16,9 @@ type MetadataDrawer struct {
 	scope
 }
 
-func (m *MetadataDrawer) Draw() error {
+func (m *MetadataDrawer) Draw(d drawFunc) error {
 	if len(*m.Queue) == 0 {
-		clear(m.d, m.w, m.h)
+		clear(d, m.Rectangle)
 		return nil
 	}
 
@@ -27,7 +28,7 @@ func (m *MetadataDrawer) Draw() error {
 	}
 
 	if len(meta) == 0 {
-		centeredString(m.d, m.w, m.h, "no metadata found")
+		centeredString(d, m.Rectangle, "no metadata found")
 		return nil
 	}
 
@@ -44,22 +45,26 @@ func (m *MetadataDrawer) Draw() error {
 		return pairs[i].id < pairs[j].id
 	})
 
-	y := 0
+	y := m.Min.Y
 	for _, pair := range pairs {
-		if y >= m.h {
+		if y >= m.Max.Y {
 			break
 		}
-		x := drawString(offset(m.d, 0, y), m.w, fmt.Sprintf("%s: %s",
+		x := drawString(d, image.Pt(m.Min.X, y), m.Max.X, fmt.Sprintf("%s: %s",
 			pair.id, pair.text), tcell.StyleDefault)
-		for ; x < m.w; x++ {
-			m.d(x, y, ' ', tcell.StyleDefault)
+		for ; x < m.Max.X; x++ {
+			d(image.Pt(x, y), ' ', tcell.StyleDefault)
 		}
 		y++
 	}
 
-	if y < m.h {
-		clear(offset(m.d, 0, y), m.w, m.h-y)
-	}
+	clear(d, image.Rectangle{
+		Min: image.Point{
+			X: m.Min.X,
+			Y: y,
+		},
+		Max: m.Max,
+	})
 
 	return nil
 }

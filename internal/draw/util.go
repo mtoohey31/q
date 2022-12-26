@@ -1,60 +1,69 @@
 package draw
 
 import (
+	"image"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
+	"golang.org/x/exp/constraints"
 )
 
-type drawFunc func(x, y int, r rune, s tcell.Style)
-
-// offset returns a new drawFunc final based on prev that is offset by xOff and
-// yOff.
-func offset(prev drawFunc, xOff, yOff int) (final drawFunc) {
-	return func(x, y int, r rune, s tcell.Style) {
-		prev(x+xOff, y+yOff, r, s)
+func min[T constraints.Ordered](a, b T) T {
+	if a < b {
+		return a
 	}
+
+	return b
 }
 
-// fill uses d to fill from x 0..w to y 0..h (both non-inclusive).
-func fill(d drawFunc, w, h int, r rune) {
-	for x := 0; x < w; x++ {
-		for y := 0; y < h; y++ {
-			d(x, y, r, tcell.StyleDefault)
+func max[T constraints.Ordered](a, b T) T {
+	if a > b {
+		return a
+	}
+
+	return b
+}
+
+// fill uses d to fill r.
+func fill(d drawFunc, r image.Rectangle, u rune) {
+	for x := r.Min.X; x < r.Max.X; x++ {
+		for y := r.Min.Y; y < r.Max.Y; y++ {
+			d(image.Pt(x, y), u, tcell.StyleDefault)
 		}
 	}
 }
 
-// clear uses d to clear from x 0..w to y 0..h (both non-inclusive).
-func clear(d drawFunc, w, h int) {
-	fill(d, w, h, ' ')
+// clear uses d to clear r.
+func clear(d drawFunc, r image.Rectangle) {
+	fill(d, r, ' ')
 }
 
-func drawString(d drawFunc, maxW int, s string, style tcell.Style) int {
-	x := 0
+func drawString(d drawFunc, o image.Point, maxX int, s string, style tcell.Style) (stopX int) {
+	c := o
 	for r, rl := utf8.DecodeRuneInString(s); len(s) > 0; r, rl = utf8.DecodeRuneInString(s) {
 		w := runewidth.RuneWidth(r)
-		if maxW >= 0 {
-			if x+w >= maxW && !(x+w == maxW && len(s) == rl) {
-				for ; x < maxW; x++ {
-					d(x, 0, '…', style)
-				}
-				return x
+		if c.X+w >= maxX && !(c.X+w == maxX && len(s) == rl) {
+			for ; c.X < maxX; c.X++ {
+				d(c, '…', style)
 			}
+			return c.X
 		}
-		d(x, 0, r, style)
+		d(c, r, style)
 
-		x += w
+		c.X += w
 		s = s[rl:]
 	}
-	return x
+	return c.X
 }
 
-func centeredString(d drawFunc, w, h int, s string) {
-	textY := h / 2
-	clear(d, w, h)
-	drawString(offset(d, (w-len(s))/2, textY), w, s, tcell.StyleDefault.
+// centeredString assumes len(s) == runewidth.StringWidth(s).
+func centeredString(d drawFunc, r image.Rectangle, s string) {
+	clear(d, r)
+	textOrigin := image.Point{
+		X: r.Min.X + max(r.Dx()-len(s), 0)/2,
+		Y: r.Min.Y + (r.Dy() / 2),
+	}
+	drawString(d, textOrigin, r.Max.X, s, tcell.StyleDefault.
 		Dim(true).Italic(true).Foreground(tcell.ColorGray))
-	clear(offset(d, 0, textY+1), w, h-textY-1)
 }

@@ -6,7 +6,7 @@ import (
 	"math"
 	"os"
 
-	"mtoohey.com/q/internal/termimage"
+	"mtoohey.com/q/internal/draw/termimage"
 	"mtoohey.com/q/internal/track"
 )
 
@@ -17,14 +17,13 @@ import (
 type CoverDynWDrawer struct {
 	Queue *[]*track.Track
 
-	// AbsHeight fetch the full height of the screen
-	AbsHeight func() int
-
 	// prevCover is the cover that was drawn last time. This is used to
 	// determine whether we need to re-send the image.
 	prevCover image.Image
-	// prevW is the width that was occupied when prevCover was drawn.
-	prevW *int
+	// prevX is the x value that was drawn up to when prevCover was drawn.
+	prevX *int
+
+	scope
 }
 
 func (c *CoverDynWDrawer) Clear() error {
@@ -38,19 +37,20 @@ func (c *CoverDynWDrawer) Clear() error {
 	}
 
 	c.prevCover = nil
-	z := 0
-	c.prevW = &z
+	c.prevX = &c.scope.Min.X
 
 	return nil
 }
 
-func (c *CoverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
+func (c *CoverDynWDrawer) dynWDraw(d drawFunc) (imageW int, err error) {
+	clear(d, c.Rectangle)
+
 	if len(*c.Queue) == 0 {
 		if c.prevCover != nil {
-			return -1, c.Clear()
+			return c.Min.X, c.Clear()
 		}
 
-		return -1, nil
+		return c.Min.X, nil
 	}
 
 	cover, err := (*c.Queue)[0].Cover()
@@ -59,36 +59,38 @@ func (c *CoverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 	}
 
 	if cover == nil {
-		return -1, c.Clear()
+		return c.Min.X, c.Clear()
 	}
 
 	if cover != nil && cover == c.prevCover {
-		return *c.prevW, nil
+		return *c.prevX, nil
 	}
 
 	coverBounds := cover.Bounds()
 	coverAspectRatio := float64(coverBounds.Dx()) / float64(coverBounds.Dy())
 	cellAspectRatio := 2.28
-	w = int(math.Round(float64(h) * coverAspectRatio * cellAspectRatio))
-	imageH := h
-	if w > maxW {
-		w = maxW
-		imageH = int(math.Round(float64(w) / coverAspectRatio / cellAspectRatio))
+	imageW = int(math.Round(float64(c.Dy()) * coverAspectRatio * cellAspectRatio))
+	imageH := c.Dy()
+	if imageW > c.Max.X {
+		imageW = c.Max.X
+		imageH = int(math.Round(float64(imageW) / coverAspectRatio / cellAspectRatio))
 	}
+	imageR := c.Rectangle
+	imageR.Max = c.Min.Add(image.Pt(imageW, imageH))
 
-	err = termimage.WriteImage(os.Stdout, cover, image.Rect(0, c.AbsHeight()-h, w, c.AbsHeight()-h+imageH))
+	err = termimage.WriteImage(os.Stdout, cover, imageR)
 	if err != nil {
 		if errors.Is(err, termimage.ErrTerminalUnsupported) {
-			return -1, nil
+			return c.Min.X, nil
 		}
 
 		return 0, err
 	}
 
-	clear(d, w, h)
-
 	c.prevCover = cover
-	c.prevW = &w
+	c.prevX = &imageR.Max.X
 
-	return w, nil
+	return imageR.Max.X, nil
 }
+
+var _ DynWDrawClearer = &CoverDynWDrawer{}

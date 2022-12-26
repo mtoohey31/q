@@ -2,6 +2,7 @@ package draw
 
 import (
 	"fmt"
+	"image"
 
 	"mtoohey.com/q/internal/track"
 
@@ -18,16 +19,16 @@ type QueueDrawer struct {
 	scope
 }
 
-func (q *QueueDrawer) Draw() error {
+func (q *QueueDrawer) Draw(d drawFunc) error {
 	if len(*q.Queue) == 0 {
-		centeredString(q.d, q.w, q.h, "queue empty")
+		centeredString(d, q.Rectangle, "queue empty")
 		return nil
 	}
 
 	// make sure scrolloff is no greater than half the current height
 	scrollOff := q.ScrollOff
-	if scrollOff > q.h/2 {
-		scrollOff = q.h / 2
+	if scrollOff > q.Dy()/2 {
+		scrollOff = q.Dy() / 2
 	}
 
 	distFromTop := *q.QueueFocusIdx - q.scrollIdx
@@ -38,13 +39,13 @@ func (q *QueueDrawer) Draw() error {
 		}
 	}
 
-	distFromBottom := q.h - distFromTop
+	distFromBottom := q.Dy() - distFromTop
 	if distFromBottom <= scrollOff {
 		q.scrollIdx += 1 + scrollOff - distFromBottom
 	}
 
 	y := 0
-	for ; y < q.h && y+q.scrollIdx < len(*q.Queue); y++ {
+	for ; y < q.Dy() && y+q.scrollIdx < len(*q.Queue); y++ {
 		description, err := (*q.Queue)[y+q.scrollIdx].Description()
 		if err != nil {
 			return fmt.Errorf("failed to get description of queue[%d]: %w", y, err)
@@ -54,19 +55,25 @@ func (q *QueueDrawer) Draw() error {
 		if y+q.scrollIdx == *q.QueueFocusIdx {
 			style = style.Background(tcell.ColorAqua).Foreground(tcell.ColorBlack)
 		}
-		q.d(0, y, ' ', style)
-		x := drawString(offset(q.d, 1, y), q.w-2, description, style)
-		for x++; x < q.w; x++ {
-			q.d(x, y, ' ', style)
+		d(q.Min.Add(image.Pt(0, y)), ' ', style)
+		x := drawString(d, q.Min.Add(image.Pt(1, y)), q.Max.X-1, description, style)
+		for ; x < q.Max.X; x++ {
+			d(image.Pt(x, y), ' ', style)
 		}
 	}
-	clear(offset(q.d, 0, y), q.w, q.h-y)
+	clear(d, image.Rectangle{
+		Min: image.Point{
+			X: q.Min.X,
+			Y: q.Min.Y + y,
+		},
+		Max: q.Max,
+	})
 
 	return nil
 }
 
 func (q *QueueDrawer) Height() int {
-	return q.h
+	return q.Dy()
 }
 
 var _ Drawer = &QueueDrawer{}
