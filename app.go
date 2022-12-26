@@ -217,6 +217,10 @@ func newApp(options appOptions) (a *app, err error) {
 		MusicDir: options.MusicDir,
 	}
 
+	initialTab := options.InitialTab
+	if len(a.queue) == 0 {
+		initialTab = types.TabSearch
+	}
 	a.switchableDrawer = &draw.SwitchableDrawer{
 		Drawers: []draw.Drawer{
 			types.TabMetadata: &draw.MetadataDrawer{Queue: &a.queue},
@@ -224,7 +228,7 @@ func newApp(options appOptions) (a *app, err error) {
 			types.TabSearch:   a.searchDrawer,
 			// TODO: visualizer
 		},
-		Tab: options.InitialTab,
+		Tab: initialTab,
 	}
 
 	a.bottomDrawer = &draw.HorizDynLimitRatioSplitDrawer{
