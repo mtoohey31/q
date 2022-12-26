@@ -405,8 +405,9 @@ func (a *app) loop() error {
 						if a.shuffleIdx != nil {
 							*a.shuffleIdx++
 						}
+						wasPlaying := !a.paused && a.streamer != nil
 						a.playQueueTop()
-						if a.paused {
+						if !wasPlaying {
 							a.paused = false
 							a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
 						}
