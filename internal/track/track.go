@@ -4,27 +4,90 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	//revive:disable this is necessary for image
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-	//revive:enable
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/bogem/id3v2"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/flac"
-	"github.com/faiface/beep/mp3"
 	"github.com/faiface/beep/vorbis"
 	"github.com/faiface/beep/wav"
 )
+
+type format uint8
+
+const (
+	formatMp3 format = iota
+	formatFlac
+	formatWav
+	formatVorbis
+	formatMp4
+)
+
+// String implements fmt.Stringer.
+func (f format) String() string {
+	switch f {
+	case formatMp3:
+		return "mp3"
+	case formatFlac:
+		return "flac"
+	case formatWav:
+		return "wav"
+	case formatVorbis:
+		return "vorbis"
+	case formatMp4:
+		return "mp4"
+	default:
+		return "<invalid format>"
+	}
+}
+
+var _ fmt.Stringer = format(0)
+
+// formatHandler defines functions for handling a given audio format. Functions
+// may be nil, which indicates that the operation is not supported.
+type formatHandler struct {
+	info  func(io.Reader) (title, artist string, err error)
+	cover func(io.Reader) (image.Image, error)
+	// TODO: support lyrics with timestamps
+	lyrics   func(io.Reader) (string, error)
+	metadata func(io.Reader) (map[string]string, error)
+	decode   func(io.ReadCloser) (beep.StreamSeekCloser, beep.Format, error)
+}
+
+// wrapReaderDecoder converts a decode function that takes an io.Reader to one
+// that takes an io.ReadCloser.
+func wrapReaderDecoder(d func(io.Reader) (beep.StreamSeekCloser, beep.Format, error)) func(io.ReadCloser) (beep.StreamSeekCloser, beep.Format, error) {
+	return func(rc io.ReadCloser) (beep.StreamSeekCloser, beep.Format, error) {
+		return d(rc)
+	}
+}
+
+// formatHandlers contains formatHandler objects for the audio formats
+// supported by this player.
+var formatHandlers = [...]*formatHandler{
+	formatMp3: mp3FormatHandler,
+	formatFlac: {
+		decode: wrapReaderDecoder(flac.Decode),
+	},
+	formatWav: {
+		decode: wrapReaderDecoder(wav.Decode),
+	},
+	formatVorbis: {
+		decode: vorbis.Decode,
+	},
+	formatMp4: nil,
+}
 
 // Track represents a song on the filesystem. This type must not be copied
 // after Title, Description, or Cover are accessed.
 type Track struct {
 	Path string
+
+	formatOnce sync.Once
+	format     format
+	formatErr  error
 
 	infoOnce      sync.Once
 	title, artist string
@@ -38,36 +101,76 @@ type Track struct {
 	lyrics     string
 	lyricsErr  error
 
-	metaOnce sync.Once
-	meta     map[string]string
-	metaErr  error
+	metadataOnce sync.Once
+	metadata     map[string]string
+	metadataErr  error
+}
+
+func (t *Track) initFormat() {
+	t.formatOnce.Do(func() {
+		f, err := os.Open(t.Path)
+		if err != nil {
+			t.formatErr = err
+			return
+		}
+
+		var magic [12]byte
+		_, err = f.Read(magic[:])
+		if err != nil {
+			t.formatErr = err
+			return
+		}
+
+		switch {
+		// TODO: does the current metadata parsing only work when we get a file
+		// that has the "ID3" marker?
+		case bytes.Compare(magic[:3], []byte("ID3")) == 0 ||
+			bytes.Compare(magic[:2], []byte{0xFF, 0xFB}) == 0 ||
+			bytes.Compare(magic[:2], []byte{0xFF, 0xF3}) == 0 ||
+			bytes.Compare(magic[:2], []byte{0xFF, 0xF2}) == 0:
+			t.format = formatMp3
+		case bytes.Compare(magic[:4], []byte("fLaC")) == 0:
+			t.format = formatFlac
+		case bytes.Compare(magic[:4], []byte("RIFF")) == 0 ||
+			bytes.Compare(magic[8:12], []byte("WAVE")) == 0:
+			t.format = formatWav
+		case bytes.Compare(magic[:4], []byte("OggS")) == 0:
+			t.format = formatVorbis
+		case bytes.Compare(magic[:8], []byte("ftypisom")) == 0:
+			t.format = formatMp4
+		default:
+			t.formatErr = fmt.Errorf("unknown format with magic: %v", magic)
+		}
+	})
 }
 
 func (t *Track) initInfo() {
 	t.infoOnce.Do(func() {
-		tag, err := id3v2.Open(t.Path, id3v2.Options{
-			Parse:       true,
-			ParseFrames: []string{"Title", "Artist"},
-		})
-		if err != nil {
-			t.infoErr = err
+		if t.initFormat(); t.formatErr != nil {
+			t.infoErr = fmt.Errorf("format error: %w", t.formatErr)
 			return
 		}
 
-		t.title, t.artist = tag.Title(), tag.Artist()
-
-		err = tag.Close()
-		if err != nil {
-			t.infoErr = err
+		handlers := formatHandlers[t.format]
+		if handlers == nil || handlers.info == nil {
+			// don't throw an error, but leave things empty
 			return
 		}
+
+		f, err := os.Open(t.Path)
+		if err != nil {
+			t.infoErr = fmt.Errorf("open failed: %w", err)
+			return
+		}
+		defer f.Close() // intentionally ignore close error
+
+		t.title, t.artist, t.infoErr = handlers.info(f)
 	})
 }
 
 // Description returns a short, friendly description of the track.
 func (t *Track) Description() (string, error) {
-	t.initInfo()
-	if t.infoErr != nil {
+	if t.initInfo(); t.infoErr != nil {
 		return "", t.infoErr
 	}
 
@@ -85,8 +188,7 @@ func (t *Track) Description() (string, error) {
 // Title returns the title of the track. The basename of the track's path may
 // be used if no title was found.
 func (t *Track) Title() (string, error) {
-	t.initInfo()
-	if t.infoErr != nil {
+	if t.initInfo(); t.infoErr != nil {
 		return "", t.infoErr
 	}
 
@@ -110,38 +212,25 @@ func (t *Track) Artist() (string, error) {
 // a cover image.
 func (t *Track) Cover() (image.Image, error) {
 	t.coverOnce.Do(func() {
-		tag, err := id3v2.Open(t.Path, id3v2.Options{
-			Parse:       true,
-			ParseFrames: []string{"Attached picture"},
-		})
-		if err != nil {
-			t.coverErr = err
+		if t.initFormat(); t.formatErr != nil {
+			t.infoErr = fmt.Errorf("format error: %w", t.formatErr)
 			return
 		}
-		for _, f := range tag.GetFrames(tag.CommonID("Attached picture")) {
-			pf, ok := f.(id3v2.PictureFrame)
-			if !ok {
-				t.coverErr = fmt.Errorf("picture assert failed")
-				return
-			}
 
-			// 3 is "Cover (front)", see https://id3.org/id3v2.3.0#Attached_picture
-			if pf.PictureType == 3 {
-				img, _, err := image.Decode(bytes.NewBuffer(pf.Picture))
-				if err != nil {
-					t.coverErr = fmt.Errorf("failed to decode cover: %w", err)
-					return
-				}
-				t.cover = img
-				break
-			}
-		}
-
-		err = tag.Close()
-		if err != nil {
-			t.coverErr = err
+		handlers := formatHandlers[t.format]
+		if handlers == nil || handlers.cover == nil {
+			// leave the cover nil, since that's allowed
 			return
 		}
+
+		f, err := os.Open(t.Path)
+		if err != nil {
+			t.coverErr = fmt.Errorf("open failed: %w", err)
+			return
+		}
+		defer f.Close() // intentionally ignore close error
+
+		t.cover, t.coverErr = handlers.cover(f)
 	})
 
 	return t.cover, t.coverErr
@@ -152,85 +241,57 @@ func (t *Track) Cover() (image.Image, error) {
 // lyrics.
 func (t *Track) Lyrics() (string, error) {
 	t.lyricsOnce.Do(func() {
-		tag, err := id3v2.Open(t.Path, id3v2.Options{
-			Parse:       true,
-			ParseFrames: []string{"Unsynchronised lyrics/text transcription"},
-		})
-		if err != nil {
-			t.lyricsErr = err
+		if t.initFormat(); t.formatErr != nil {
+			t.infoErr = fmt.Errorf("format error: %w", t.formatErr)
 			return
 		}
-		for _, f := range tag.GetFrames(tag.CommonID("Unsynchronised lyrics/text transcription")) {
-			ulf, ok := f.(id3v2.UnsynchronisedLyricsFrame)
-			if !ok {
-				t.lyricsErr = fmt.Errorf("lyrics assert failed")
-				return
-			}
 
-			// TODO: handle when there are multiple frames
-			t.lyrics = ulf.Lyrics
-			break
-		}
-
-		err = tag.Close()
-		if err != nil {
-			t.lyricsErr = err
+		handlers := formatHandlers[t.format]
+		if handlers == nil || handlers.lyrics == nil {
+			// leave the lyrics empty
 			return
 		}
+
+		f, err := os.Open(t.Path)
+		if err != nil {
+			t.lyricsErr = fmt.Errorf("open failed: %w", err)
+			return
+		}
+		defer f.Close() // intentionally ignore close error
+
+		t.lyrics, t.lyricsErr = handlers.lyrics(f)
 	})
 
-	return t.lyrics, t.coverErr
+	return t.lyrics, t.lyricsErr
 }
 
 // Metadata returns all metadata for this track, if it can be fetched. This
 // function will return nil, nil if no error is encountered but no metadata can
 // be found.
 func (t *Track) Metadata() (map[string]string, error) {
-	t.metaOnce.Do(func() {
-		tag, err := id3v2.Open(t.Path, id3v2.Options{Parse: true})
-		if err != nil {
-			t.metaErr = err
+	t.metadataOnce.Do(func() {
+		if t.initFormat(); t.formatErr != nil {
+			t.infoErr = fmt.Errorf("format error: %w", t.formatErr)
 			return
 		}
 
-		t.meta = map[string]string{}
-
-		var ids map[string]string
-		if tag.Version() == 3 {
-			ids = id3v2.V23CommonIDs
-		} else {
-			ids = id3v2.V24CommonIDs
-		}
-
-		getIDName := func(id string) string {
-			var shortestName string
-			for name, oID := range ids {
-				if id == oID && (shortestName == "" || len(shortestName) > len(name)) {
-					shortestName = name
-				}
-			}
-
-			if shortestName == "" {
-				return id
-			}
-
-			return shortestName
-		}
-
-		for id := range tag.AllFrames() {
-			if textFrame, ok := tag.GetLastFrame(id).(id3v2.TextFrame); ok {
-				t.meta[getIDName(id)] = textFrame.Text
-			}
-		}
-
-		err = tag.Close()
-		if err != nil {
-			t.metaErr = err
+		handlers := formatHandlers[t.format]
+		if handlers == nil || handlers.metadata == nil {
+			// leave the metadata empty
 			return
 		}
+
+		f, err := os.Open(t.Path)
+		if err != nil {
+			t.metadataErr = fmt.Errorf("open failed: %w", err)
+			return
+		}
+		defer f.Close() // intentionally ignore close error
+
+		t.metadata, t.metadataErr = handlers.metadata(f)
 	})
 
-	return t.meta, t.metaErr
+	return t.metadata, t.metadataErr
 }
 
 // Decode returns a beep.StreamSeekCloser and beep.Format for this track.
@@ -238,44 +299,20 @@ func (t *Track) Metadata() (map[string]string, error) {
 // It is the caller's responsibility to close the beep.StreamSeekCloser when
 // they are finished with it.
 func (t *Track) Decode() (beep.StreamSeekCloser, beep.Format, error) {
+	if t.initFormat(); t.formatErr != nil {
+		return nil, beep.Format{}, fmt.Errorf("format error: %w", t.formatErr)
+	}
+
+	handlers := formatHandlers[t.format]
+	if handlers == nil || handlers.decode == nil {
+		return nil, beep.Format{}, fmt.Errorf("decode not supported for format %s", t.format.String())
+	}
+
 	f, err := os.Open(t.Path)
 	if err != nil {
-		return nil, beep.Format{}, err
+		return nil, beep.Format{}, fmt.Errorf("open failed: %w", err)
 	}
+	// don't close, will be closed when the StreamSeekCloser gets closed
 
-	var magic [12]byte
-	_, err = f.Read(magic[:])
-	if err != nil {
-		return nil, beep.Format{}, err
-	}
-	_, err = f.Seek(0, 0)
-	if err != nil {
-		return nil, beep.Format{}, err
-	}
-
-	if bytes.Compare(magic[:3], []byte("ID3")) == 0 ||
-		bytes.Compare(magic[:2], []byte{0xFF, 0xFB}) == 0 ||
-		bytes.Compare(magic[:2], []byte{0xFF, 0xF3}) == 0 ||
-		bytes.Compare(magic[:2], []byte{0xFF, 0xF2}) == 0 {
-		return mp3.Decode(f)
-	}
-
-	if bytes.Compare(magic[:4], []byte("fLaC")) == 0 {
-		// TODO: flac panics if you try to seek it after it hits EOF... this is
-		// inconsistent with the behaviour of mp3
-		return flac.Decode(f)
-	}
-
-	if bytes.Compare(magic[:4], []byte("RIFF")) == 0 ||
-		bytes.Compare(magic[8:12], []byte("WAVE")) == 0 {
-		return wav.Decode(f)
-	}
-
-	if bytes.Compare(magic[:4], []byte("OggS")) == 0 {
-		return vorbis.Decode(f)
-	}
-
-	// TODO: support other formats, and return an error that can be handled on
-	// the other end if we don't find a format we support.
-	return nil, beep.Format{}, fmt.Errorf("unsupported format with magic: %v", magic)
+	return handlers.decode(f)
 }

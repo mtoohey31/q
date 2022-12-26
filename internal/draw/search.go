@@ -54,7 +54,7 @@ func (s *SearchDrawer) Draw() error {
 		s.d(x, 0, ' ', tcell.StyleDefault.Underline(true))
 	}
 
-	if s.query != s.prevQuery {
+	if s.query != s.prevQuery || s.results == nil {
 		var err error
 		s.results, err = query.Query(s.MusicDir, s.query)
 		if err != nil {

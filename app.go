@@ -58,10 +58,14 @@ func (a *app) fatalf(err error, format string, args ...any) {
 	}
 }
 
-func (a *app) fatalfIf(err error, format string, args ...any) {
+// fatalfIf returns whether err was non-nil.
+func (a *app) fatalfIf(err error, format string, args ...any) bool {
 	if err != nil {
 		a.fatalf(err, format, args...)
+		return true
 	}
+
+	return false
 }
 
 // warning wraps an error to indicate that it should be considered non-fatal
@@ -267,7 +271,7 @@ func (a *app) loop() error {
 			}
 
 		case *tcell.EventError:
-			return fmt.Errorf("%w", ev)
+			return ev
 
 		case *tcell.EventResize:
 			w, h := ev.Size()
@@ -275,8 +279,8 @@ func (a *app) loop() error {
 				a.screen.SetContent(x, y, r, nil, s)
 			}, w, h)
 			a.fatalfIf(a.coverDrawer.Clear(), "cover clear failed")
-			a.fatalfIf(a.rootDrawer.Draw(), "root draw failed")
-			if a.streamSeekCloser != nil && !a.paused {
+			if !a.fatalfIf(a.rootDrawer.Draw(), "root draw failed") &&
+				a.streamSeekCloser != nil && !a.paused {
 				a.progressDrawer.SpawnProgressDrawers(a.screen.Show)
 			}
 
@@ -379,7 +383,9 @@ func (a *app) loop() error {
 
 						if len(a.queue) > 0 {
 							a.queue = append([]*track.Track{a.queue[0], {Path: res}}, a.queue[1:]...)
-							*a.shuffleIdx++
+							if a.shuffleIdx != nil {
+								*a.shuffleIdx++
+							}
 							a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 							break
 						}
@@ -392,7 +398,9 @@ func (a *app) loop() error {
 						}
 
 						a.queue = append([]*track.Track{{Path: res}}, a.queue...)
-						*a.shuffleIdx++
+						if a.shuffleIdx != nil {
+							*a.shuffleIdx++
+						}
 						a.playQueueTop()
 						if a.paused {
 							a.paused = false
@@ -500,9 +508,9 @@ func (a *app) paste(before bool) {
 
 	if a.queueFocusIdx == 0 {
 		a.playQueueTop()
-		a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-		a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
-		a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
+		a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+		a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
+		a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
 	}
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 }
@@ -586,8 +594,8 @@ func (a *app) jumpFocused() {
 
 	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
+	a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
+	a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
 }
 
 func (a *app) cyclePause() {
@@ -643,7 +651,7 @@ func (a *app) reshuffle() {
 		shuffle(a.queue[*a.shuffleIdx:])
 	}
 
-	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
+	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
 }
 
 func (a *app) skip() {
@@ -700,10 +708,10 @@ func (a *app) skipLocked(r types.Repeat) {
 
 	a.playQueueTopLocked()
 
-	a.warnfIf(a.queueDrawer.Draw(), "queue draw failed")
-	a.warnfIf(a.bottomDrawer.Draw(), "bottom draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
-	a.warnfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
+	a.fatalfIf(a.queueDrawer.Draw(), "queue draw failed")
+	a.fatalfIf(a.bottomDrawer.Draw(), "bottom draw failed")
+	a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabMetadata), "metadata draw failed")
+	a.fatalfIf(a.switchableDrawer.DrawIfVisible(types.TabLyrics), "lyrics draw failed")
 }
 
 func (a *app) playQueueTop() {

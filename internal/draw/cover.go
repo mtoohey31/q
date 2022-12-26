@@ -55,11 +55,7 @@ func (c *CoverDynWDrawer) dynWDraw(d drawFunc, maxW, h int) (w int, err error) {
 	}
 
 	if cover == nil {
-		if err := c.Clear(); err != nil {
-			return 0, err
-		}
-
-		return -1, nil
+		return -1, c.Clear()
 	}
 
 	if cover != nil && cover == c.prevCover {

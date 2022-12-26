@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"mtoohey.com/q/internal/track"
 	"mtoohey.com/q/internal/types"
 
 	"github.com/alecthomas/kong"
@@ -17,9 +18,6 @@ import (
 
 // TODO: fix rendering bugs, can be reproduced by opening a large queue then
 // holding down the remove from queue button
-
-// TODO: add health check subcommand that prints supported file formats for
-// playback and metadata
 
 // TODO: add support for listening on and sending commands to a socket
 
@@ -56,8 +54,13 @@ type appOptions struct {
 	InitialQueries []string     `arg:"" optional:"true" help:"Queries whose results will become the initial queue."`
 }
 
+type cli struct {
+	appOptions
+	Supported bool `short:"p" help:"Show info about supported formats."`
+}
+
 func main() {
-	var flags appOptions
+	var flags cli
 	parser := kong.Must(&flags,
 		kong.TypeMapper(reflect.TypeOf(types.RepeatNone), types.RepeatMapper{}),
 		kong.TypeMapper(reflect.TypeOf(types.TabMetadata), types.TabMapper{}),
@@ -83,7 +86,12 @@ func main() {
 		return
 	}
 
-	app, err := newApp(flags)
+	if flags.Supported {
+		err = track.PrintSupported(os.Stdout)
+		return
+	}
+
+	app, err := newApp(flags.appOptions)
 	if err != nil {
 		return
 	}
