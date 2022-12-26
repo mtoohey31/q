@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/rand"
 	"time"
-	"unicode/utf8"
 
 	"mtoohey.com/q/internal/draw"
 	"mtoohey.com/q/internal/query"
@@ -287,10 +286,33 @@ func (a *app) loop() error {
 				return nil
 
 			case tcell.KeyLeft:
-				a.seekBy(time.Second * -5)
+				if a.typing {
+					a.fatalfIf(a.searchDrawer.Left(), "search left failed")
+				} else {
+					a.seekBy(time.Second * -5)
+				}
 
 			case tcell.KeyRight:
-				a.seekBy(time.Second * 5)
+				if a.typing {
+					a.fatalfIf(a.searchDrawer.Right(), "search right failed")
+				} else {
+					a.seekBy(time.Second * 5)
+				}
+
+			case tcell.KeyHome, tcell.KeyCtrlA:
+				if a.typing {
+					a.fatalfIf(a.searchDrawer.ToStart(), "search to start failed")
+				}
+
+			case tcell.KeyEnd, tcell.KeyCtrlE:
+				if a.typing {
+					a.fatalfIf(a.searchDrawer.ToEnd(), "search to end failed")
+				}
+
+			case tcell.KeyCtrlW:
+				if a.typing {
+					a.fatalfIf(a.searchDrawer.KillWord(), "search kill word failed")
+				}
 
 			case tcell.KeyDown:
 				if a.typing {
@@ -339,15 +361,11 @@ func (a *app) loop() error {
 				if !a.typing {
 					break
 				}
-				_, n := utf8.DecodeLastRune(a.searchDrawer.Bytes())
-				a.searchDrawer.Truncate(a.searchDrawer.Len() - n)
-				a.fatalfIf(a.searchDrawer.Draw(), "search draw failed")
+				a.fatalfIf(a.searchDrawer.Backspace(), "search backspace failed")
 
 			case tcell.KeyRune:
 				if a.typing {
-					_, err := a.searchDrawer.WriteRune(ev.Rune())
-					a.fatalfIf(err, "search write rune failed")
-					a.fatalfIf(a.searchDrawer.Draw(), "search draw failed")
+					a.fatalfIf(a.searchDrawer.Insert(ev.Rune()), "search insert failed")
 					break
 				}
 
