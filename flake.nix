@@ -16,9 +16,9 @@
 
   outputs = { self, nixpkgs, utils, errcheck-src, gow-src }: {
     overlays.default = final: _: {
-      q = final.buildGoModule rec {
-        name = "q";
-        pname = name;
+      q = final.buildGoModule {
+        pname = "q";
+        version = builtins.readFile ./internal/version/version.txt;
         src = ./.;
         buildInputs = [ final.alsa-lib ];
         nativeBuildInputs = [ final.pkg-config ];

@@ -1,111 +1,33 @@
 package main
 
 import (
-	"errors"
-	"fmt"
 	"os"
-	"path/filepath"
-	"reflect"
-	"strings"
-	"time"
 
-	"mtoohey.com/q/internal/track"
-	"mtoohey.com/q/internal/types"
+	"mtoohey.com/q/internal/cmd"
+	"mtoohey.com/q/internal/remote"
+	"mtoohey.com/q/internal/server"
+	"mtoohey.com/q/internal/tui"
 
 	"github.com/alecthomas/kong"
-	"github.com/faiface/beep/speaker"
 )
 
-// TODO: fix rendering bugs, can be reproduced by opening a large queue then
-// holding down the remove from queue button
-
-// TODO: add support for listening on and sending commands to a socket
-
-func loadConfig() ([]string, error) {
-	cfgHome, ok := os.LookupEnv("XDG_CONFIG_HOME")
-	if !ok {
-		var home string
-		home, ok = os.LookupEnv("HOME")
-		if !ok {
-			return nil, nil
-		}
-		cfgHome = filepath.Join(home, ".config")
-	}
-
-	b, err := os.ReadFile(filepath.Join(cfgHome, "q", "q.conf"))
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	return strings.Fields(string(b)), nil
-}
-
-type appOptions struct {
-	Shuffle        bool         `short:"s" negatable:"true" default:"true" help:"Initial shuffle mode."`
-	Repeat         types.Repeat `short:"r" default:"queue" help:"Initial repeat mode."`
-	InitialTab     types.Tab    `short:"i" default:"metadata" help:"Tab to display first."`
-	SampleRate     uint         `short:"t" default:"44100" help:"Sample rate to use for the player as a whole. Audio files with different sample rates will be resampled."`
-	MusicDir       string       `short:"m" default:"." type:"path" help:"Directory containing music files."`
-	ScrollOff      int          `short:"o" default:"7" help:"Lines of padding from the cursor to the edge of the screen when scrolling."`
-	InitialQueries []string     `arg:"" optional:"true" help:"Queries whose results will become the initial queue."`
-}
-
 type cli struct {
-	appOptions
-	Supported bool `short:"p" help:"Show info about supported formats."`
+	Remote  remote.Cmd `cmd:"" aliases:"r" help:"Communicate with a server."`
+	Server  server.Cmd `cmd:"" aliases:"s" help:"Start a server in the background."`
+	Support struct{}   `cmd:"" aliases:"p" help:"Show info about supported formats."`
+	TUI     tui.Cmd    `cmd:"" aliases:"t" default:"withargs" help:"Start an interactive TUI."`
 }
 
 func main() {
 	var flags cli
-	parser := kong.Must(&flags,
-		kong.TypeMapper(reflect.TypeOf(types.RepeatNone), types.RepeatMapper{}),
-		kong.TypeMapper(reflect.TypeOf(types.TabMetadata), types.TabMapper{}),
-	)
+	parser := kong.Parse(&flags, append(
+		cmd.TypeMappers,
+		kong.Description("A terminal music player."),
+	)...)
 
-	// from here on out, we use this same error variable for the current error,
-	// and we call return if it is non-nil. by doing this, we allow future
-	// defers with resource cleanups (such as closing the speaker and restoring
-	// the screen) to be run before the exit happens
+	// TODO: support some sort of configuration file
 
-	var err error
-	defer func() {
-		parser.FatalIfErrorf(err)
-	}()
-
-	cfgArgs, err := loadConfig()
-	if err != nil {
-		return
-	}
-
-	_, err = parser.Parse(append(cfgArgs, os.Args[1:]...))
-	if err != nil {
-		return
-	}
-
-	if flags.Supported {
-		err = track.PrintSupported(os.Stdout)
-		return
-	}
-
-	app, err := newApp(flags.appOptions)
-	if err != nil {
-		return
-	}
-	defer app.screen.Fini()
-
-	err = speaker.Init(app.sampleRate, app.sampleRate.N(time.Millisecond*10))
-	if err != nil {
-		return
-	}
-	defer speaker.Close()
-
-	speaker.Play(app)
-
-	if err = app.loop(); err != nil {
-		return
-	}
+	ctx, err := parser.Parse(os.Args[1:])
+	parser.FatalIfErrorf(err)
+	parser.FatalIfErrorf(ctx.Run())
 }

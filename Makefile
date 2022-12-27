@@ -1,5 +1,11 @@
+.PHONY: all
+all: q
+
+q: go.mod go.sum internal/version/version.txt vendor/modules.txt $(shell find . -type d -o -name '*.go')
+	go build -o $@
+
 .PHONY: ci
-ci: fmt-check revive errcheck
+ci: fmt-check vet revive errcheck
 
 .PHONY: fmt
 fmt:
@@ -8,6 +14,10 @@ fmt:
 .PHONY: fmt-check
 fmt-check:
 	test -z "$$(gofmt -l $$(find . -name vendor -prune -false -o -name '*.go'))"
+
+.PHONY: vet
+vet:
+	go vet ./...
 
 .PHONY: revive
 revive:

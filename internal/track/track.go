@@ -25,7 +25,6 @@ const (
 	formatMp4
 )
 
-// String implements fmt.Stringer.
 func (f format) String() string {
 	switch f {
 	case formatMp3:
@@ -106,6 +105,14 @@ type Track struct {
 	metadataErr  error
 }
 
+type unknownFormatError struct {
+	magic []byte
+}
+
+func (ufe *unknownFormatError) Error() string {
+	return fmt.Sprintf("unknown format with magic % x", ufe.magic)
+}
+
 func (t *Track) initFormat() {
 	t.formatOnce.Do(func() {
 		f, err := os.Open(t.Path)
@@ -139,9 +146,7 @@ func (t *Track) initFormat() {
 		case bytes.Compare(magic[:8], []byte("ftypisom")) == 0:
 			t.format = formatMp4
 		default:
-			// TODO: surface this to the user as a warning instead of making
-			// it something fatal that can stop the program
-			t.formatErr = fmt.Errorf("unknown format with magic: %v", magic)
+			t.formatErr = &unknownFormatError{magic[:]}
 		}
 	})
 }
@@ -149,6 +154,11 @@ func (t *Track) initFormat() {
 func (t *Track) initInfo() {
 	t.infoOnce.Do(func() {
 		if t.initFormat(); t.formatErr != nil {
+			if _, ok := t.formatErr.(*unknownFormatError); ok {
+				t.title = filepath.Base(t.Path)
+				return
+			}
+
 			t.infoErr = fmt.Errorf("format error: %w", t.formatErr)
 			return
 		}
@@ -164,7 +174,7 @@ func (t *Track) initInfo() {
 			t.infoErr = fmt.Errorf("open failed: %w", err)
 			return
 		}
-		defer f.Close() // intentionally ignore close error
+		defer func() { _ = f.Close() }() // intentionally ignore close error
 
 		t.title, t.artist, t.infoErr = handlers.info(f)
 	})
@@ -230,7 +240,7 @@ func (t *Track) Cover() (image.Image, error) {
 			t.coverErr = fmt.Errorf("open failed: %w", err)
 			return
 		}
-		defer f.Close() // intentionally ignore close error
+		defer func() { _ = f.Close() }() // intentionally ignore close error
 
 		t.cover, t.coverErr = handlers.cover(f)
 	})
@@ -259,7 +269,7 @@ func (t *Track) Lyrics() (string, error) {
 			t.lyricsErr = fmt.Errorf("open failed: %w", err)
 			return
 		}
-		defer f.Close() // intentionally ignore close error
+		defer func() { _ = f.Close() }() // intentionally ignore close error
 
 		t.lyrics, t.lyricsErr = handlers.lyrics(f)
 	})
@@ -288,7 +298,7 @@ func (t *Track) Metadata() (map[string]string, error) {
 			t.metadataErr = fmt.Errorf("open failed: %w", err)
 			return
 		}
-		defer f.Close() // intentionally ignore close error
+		defer func() { _ = f.Close() }() // intentionally ignore close error
 
 		t.metadata, t.metadataErr = handlers.metadata(f)
 	})
