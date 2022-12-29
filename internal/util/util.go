@@ -4,14 +4,7 @@ import "golang.org/x/exp/constraints"
 
 // Clamp returns Max(min, Min(v, max)).
 func Clamp[T constraints.Ordered](min, v, max T) T {
-	if v > max {
-		v = max
-	}
-	if v < min {
-		v = min
-	}
-
-	return v
+	return Max(min, Min(v, max))
 }
 
 // Max returns the larger value of a and b.
