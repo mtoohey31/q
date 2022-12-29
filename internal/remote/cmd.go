@@ -3,6 +3,7 @@ package remote
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
@@ -161,9 +162,14 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 		m = protocol.RemoveAll{}
 
 	case "insert":
+		absPath, err := filepath.Abs(c.Insert.Path)
+		if err != nil {
+			return fmt.Errorf("failed to create absolute path: %w", err)
+		}
+
 		m = protocol.Insert{
 			Index: c.Insert.Index,
-			Path:  c.Insert.Path,
+			Path:  absPath,
 		}
 
 	default:
