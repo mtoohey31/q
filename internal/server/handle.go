@@ -25,7 +25,7 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 	case protocol.RepeatState:
 		s.repeat.Store(m)
-		s.broadcast(s.repeat)
+		s.broadcast(s.repeat.Load().(protocol.RepeatState))
 
 	case protocol.ShuffleState:
 		s.shuffle.Store(bool(m))

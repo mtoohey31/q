@@ -94,6 +94,8 @@ func newTUI(cmd Cmd, conn protocol.Conn) (*tui, error) {
 		return nil, fmt.Errorf("failed to initialize screen: %w", err)
 	}
 
+	t.initIndicatorRunes()
+
 	return t, nil
 }
 
