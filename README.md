@@ -1,3 +1,3 @@
 # q
 
-A terminal music player. WIP.
+A terminal music player.
