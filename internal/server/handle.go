@@ -94,6 +94,8 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 			return
 		}
 
+		removed := protocol.Removed(s.queue[removeIdx].Path)
+
 		s.queue = append(s.queue[:removeIdx], s.queue[removeIdx+1:]...)
 		if removeIdx < s.shuffleIdx {
 			s.decShuffleIdxLocked()
@@ -107,6 +109,7 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 		s.queueMu.Unlock()
 
+		respond(removed)
 		s.broadcastQueue()
 
 	case protocol.RemoveAll:

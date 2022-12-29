@@ -46,6 +46,7 @@ type tui struct {
 
 	mode mode
 
+	clipboardPath  string
 	queueFocusIdx  int
 	queueScrollIdx int
 
@@ -266,6 +267,9 @@ func (t *tui) loop() (err error) {
 				t.queryResults = m
 				t.drawQuery()
 
+			case protocol.Removed:
+				t.clipboardPath = string(m)
+
 			default:
 				errCh <- fmt.Errorf("unhandled message type: %T", m)
 			}
@@ -369,6 +373,28 @@ func (t *tui) loop() (err error) {
 							t.mode = modeInsert
 							t.drawMode()
 							t.drawQuery()
+
+						case 'p':
+							if t.clipboardPath == "" {
+								break
+							}
+
+							err = t.conn.Send(protocol.Insert{
+								Index: t.queueFocusIdx + 1,
+								Path:  t.clipboardPath,
+							})
+							t.clipboardPath = ""
+
+						case 'P':
+							if t.clipboardPath == "" {
+								break
+							}
+
+							err = t.conn.Send(protocol.Insert{
+								Index: t.queueFocusIdx,
+								Path:  t.clipboardPath,
+							})
+							t.clipboardPath = ""
 
 						case 'q', 'Q':
 							return nil

@@ -26,6 +26,7 @@ func init() {
 	gob.Register(NowPlayingState{})
 	gob.Register(ProgressState{})
 	gob.Register(QueueState{})
+	gob.Register(Removed(""))
 }
 
 // Error reports an error that may be general, or specific to this client.
@@ -94,3 +95,9 @@ type QueueItem string
 
 // QueryResults returns path results of a query.
 type QueryResults []string
+
+// Removed reports to the client it was sent to that the song whose path is the
+// contents of the message was successfully removed from the queue in response
+// to a message from this client. This message is only sent in response to
+// Remove; RemoveAll receives no response.
+type Removed string
