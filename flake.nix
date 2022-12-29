@@ -47,8 +47,14 @@
     }; {
     packages.default = q;
 
-    devShells.default = mkShell {
-      packages = [ go gopls gow errcheck revive pkg-config alsa-lib ];
+    devShells = rec {
+      ci = mkShell {
+        packages = [ go pkg-config alsa-lib errcheck revive ];
+      };
+
+      default = ci.overrideAttrs (oldAttrs: {
+        nativeBuildInputs = oldAttrs.nativeBuildInputs ++ [ gopls gow ];
+      });
     };
   });
 }
