@@ -19,9 +19,12 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 	switch m := m.(type) {
 	case protocol.PauseState:
 		speaker.Lock()
+		s.pausedMu.Lock()
 		s.paused = m
 		speaker.Unlock()
-		s.broadcast(s.paused)
+		speaker.Unlock()
+
+		s.broadcast(m)
 
 	case protocol.RepeatState:
 		s.repeat.Store(m)
@@ -41,48 +44,56 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 		// special case: when skipping zero places, we jump to the start of the
 		// now playing song
 		if m == 0 {
+			s.streamerMu.Lock()
 			if s.streamer == nil {
 				break
 			}
 
-			if err := s.streamer.Seek(util.Clamp(
-				0,
-				s.format.SampleRate.N(time.Duration(m)),
-				s.streamer.Len(),
-			)); err != nil {
+			if err := s.streamer.Seek(0); err != nil {
 				s.broadcastErr(fmt.Errorf("seek failed: %w", err))
+
 				s.queueMu.Lock()
 				s.skipLocked(true)
 				s.queueMu.Unlock()
 			}
-			s.broadcastProgress()
+
+			s.streamerMu.Unlock()
 			speaker.Unlock()
+			// must come after streamerMu.unlock because this needs to RLock
+			// streamerMu.
+			s.broadcastProgress()
 			break
 		}
 
 		// TODO: implement this in a less horrible, terrible, very bad, no good
 		// way
 		s.queueMu.Lock()
+		s.streamerMu.Lock()
 		for i := 0; i < int(m); i++ {
 			s.skipLocked(false) // broadcasts new now playing... each time...
 		}
+		s.streamerMu.Unlock()
 		s.queueMu.Unlock()
 		speaker.Unlock()
 
 	case protocol.Seek:
 		speaker.Lock()
+		s.streamerMu.Lock()
 		if err := s.streamer.Seek(util.Clamp(
 			0,
 			s.format.SampleRate.N(time.Duration(m)),
-			s.streamer.Len(),
+			s.streamer.Len()-1,
 		)); err != nil {
 			s.broadcastErr(fmt.Errorf("seek failed: %w", err))
 			s.queueMu.Lock()
 			s.skipLocked(true)
 			s.queueMu.Unlock()
 		}
-		s.broadcastProgress()
+		s.streamerMu.Unlock()
 		speaker.Unlock()
+		// must come after streamerMu.unlock because this needs to RLock
+		// streamerMu.
+		s.broadcastProgress()
 
 	case protocol.Remove:
 		s.queueMu.Lock()
@@ -103,7 +114,9 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 		if removeIdx == 0 {
 			speaker.Lock()
+			s.streamerMu.Lock()
 			s.playQueueTopLocked() // broadcasts new now playing
+			s.streamerMu.Unlock()
 			speaker.Unlock()
 		}
 
@@ -119,7 +132,9 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 		s.shuffleIdx = 0
 
 		speaker.Lock()
+		s.streamerMu.Lock()
 		s.playQueueTopLocked() // broadcasts new now playing
+		s.streamerMu.Unlock()
 		speaker.Unlock()
 
 		s.queueMu.Unlock()
@@ -142,7 +157,9 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 		if m.Index == 0 {
 			speaker.Lock()
+			s.streamerMu.Lock()
 			s.playQueueTopLocked() // broadcasts new now playing
+			s.streamerMu.Unlock()
 			speaker.Unlock()
 		}
 

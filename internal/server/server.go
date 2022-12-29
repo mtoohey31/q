@@ -22,14 +22,16 @@ type Server struct {
 	logger *log.Logger
 
 	// state
-	// pause is protected by the global speaker mutex, because it is read in
-	// the Stream method, so it cannot be modified while the speaker is
-	// unlocked.
-	paused  protocol.PauseState
-	repeat  atomic.Value
-	shuffle atomic.Bool
-	// queueMu protects writes to shuffleIdx and queue.
-	queueMu sync.Mutex
+	// pausedMu protects pause. speaker also needs to be locked when we modify
+	// pause, but there are cases (such as when broadcasting an updated status)
+	// where we want to read paused without locking the speaker, so we have
+	// this too...
+	pausedMu sync.RWMutex
+	paused   protocol.PauseState
+	repeat   atomic.Value
+	shuffle  atomic.Bool
+	// queueMu protects shuffleIdx and queue.
+	queueMu sync.RWMutex
 	// shuffleIdx is the index within the queue of the first song that was
 	// played during this repeat of the queue. It may be 0 if no songs have yet
 	// been finished on this repeat.
@@ -37,13 +39,16 @@ type Server struct {
 	queue      []*track.Track
 
 	// resources
-	streamer beep.StreamSeekCloser
-	format   beep.Format
+	// streamerMu protects format and streamer. Reads from, seeks of, and
+	// reassignments of streamer also require the speaker to be locked.
+	streamerMu sync.RWMutex
+	streamer   beep.StreamSeekCloser
+	format     beep.Format
 
 	channelListener *channelconn.ChannelListener
 	listeners       []protocol.Listener
-	// clientsMu protects modifications to clients.
-	clientsMu sync.Mutex
+	// clientsMu protects clients.
+	clientsMu sync.RWMutex
 	clients   []protocol.Conn
 	// disconnected recieves clients that have disconnected and should be
 	// removed.
@@ -122,10 +127,23 @@ func (s *Server) Close() error {
 	return nil
 }
 
+// Stream requires speaker to be locked, which beep will do automatically.
 func (s *Server) Stream(samples [][2]float64) (n int, ok bool) {
+	s.streamerMu.Lock()
+	n, ok = s.streamLocked(samples)
+	s.streamerMu.Unlock()
+	return
+}
+
+// streamLocked requires speaker and streamerMu to be locked.
+func (s *Server) streamLocked(samples [][2]float64) (n int, ok bool) {
 	silenceFrom := 0
 
-	if !s.paused && s.streamer != nil {
+	s.pausedMu.RLock()
+	paused := s.paused
+	s.pausedMu.RUnlock()
+
+	if !paused && s.streamer != nil {
 		var ok bool
 		var err error
 
@@ -148,7 +166,7 @@ func (s *Server) Stream(samples [][2]float64) (n int, ok bool) {
 			// recursively continue streaming after the skip to avoid silence,
 			// if there's no now-playing song after the skip, the recurisve
 			// call will realize this and fill the rest of samples with silence
-			n, _ := s.Stream(samples[silenceFrom:])
+			n, _ := s.streamLocked(samples[silenceFrom:])
 			silenceFrom += n
 		}
 	}
@@ -176,8 +194,8 @@ func (s *Server) decShuffleIdxLocked() {
 	s.shuffleIdx = newIdx
 }
 
-// skipLocked moves to the next song, if there is one. Both speaker and queue
-// should be locked before a call to this method.
+// skipLocked moves to the next song, if there is one. speaker, queue, and
+// streamer should be locked before a call to this method.
 //
 // drop indicates whether the previous song should be forcibly dropped from the
 // queue (such as in the case of an error reading from the current streamer).
@@ -203,7 +221,7 @@ func (s *Server) skipLocked(drop bool) {
 			return
 		}
 
-		s.broadcastProgress()
+		s.broadcast(s.getProgressLocked())
 
 		return
 	}
@@ -242,14 +260,12 @@ func (s *Server) skipLocked(drop bool) {
 	s.playQueueTopLocked()
 
 	s.broadcastQueue()
-
-	return
 }
 
 // playQueueTopLocked closes the current streamer, then begins decoding the
 // item at s.queue[0], if one exists. If len(s.queue) == 0 the current streamer
-// is assigned to nil. Both speaker and queue should be locked before this
-// method is called.
+// is assigned to nil. speaker, queue, and streamer should be locked before
+// this method is called.
 func (s *Server) playQueueTopLocked() {
 	if s.streamer != nil {
 		if err := s.streamer.Close(); err != nil {
@@ -260,7 +276,7 @@ func (s *Server) playQueueTopLocked() {
 	if len(s.queue) == 0 {
 		s.streamer = nil
 		s.format = beep.Format{}
-		s.broadcastNowPlaying()
+		s.broadcastNowPlayingLocked()
 
 		return
 	}
@@ -282,5 +298,5 @@ func (s *Server) playQueueTopLocked() {
 		s.streamer = resampleSeekCloser(s.format.SampleRate, s.SampleRate, streamer)
 	}
 
-	s.broadcastNowPlaying()
+	s.broadcastNowPlayingLocked()
 }

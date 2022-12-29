@@ -112,14 +112,23 @@ func (s *Server) Serve() (err error) {
 	go func() {
 		defer wg.Done()
 		for {
+			// broadcast once each second, but exit immediately once the server
+			// is closed
 			select {
 			case <-time.After(time.Second):
 			case <-s.closed:
 				return
 			}
 
-			if s.streamer != nil && !s.paused {
-				s.broadcast(s.getProgress())
+			// there's no need to send messages if we're paused because nothing
+			// should have changed without a manual seek, which will broadcast
+			// itself
+			s.pausedMu.RLock()
+			paused := s.paused
+			s.pausedMu.RUnlock()
+
+			if !paused {
+				s.broadcastProgress()
 			}
 		}
 	}()
@@ -158,8 +167,6 @@ func (s *Server) Serve() (err error) {
 
 		case <-s.closed:
 			s.clientsMu.Lock()
-			defer s.clientsMu.Unlock()
-
 			var firstErr error
 			for _, client := range s.clients {
 				if err := client.Close(); err != nil {
@@ -170,6 +177,7 @@ func (s *Server) Serve() (err error) {
 					}
 				}
 			}
+			s.clientsMu.Unlock()
 			return firstErr
 		}
 
