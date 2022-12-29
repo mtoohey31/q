@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"sync"
 
+	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/protocol"
 	"mtoohey.com/q/internal/server"
 	"mtoohey.com/q/internal/server/unixsocketconn"
@@ -24,15 +25,15 @@ type Cmd struct {
 	ServerLogPath string `short:"l" type:"path" help:"The path of the file the server's logs should be output to if an internal server must be started."`
 }
 
-func (c Cmd) Run() (err error) {
+func (c Cmd) Run(g cmd.Globals) (err error) {
 	var conn protocol.Conn
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
 	// start out assuming we will have to start our own server
 	startServer := true
-	if c.UnixSocket != "" {
-		_, err = os.Stat(c.UnixSocket)
+	if g.UnixSocket != "" {
+		_, err = os.Stat(g.UnixSocket)
 		if err == nil {
 			// only change this assumption if the unix socket flag was
 			// provided and the socket already exists
@@ -53,7 +54,8 @@ func (c Cmd) Run() (err error) {
 			out = f
 		}
 
-		s, err := server.NewServer(c.Cmd, log.New(out, "", log.LstdFlags))
+		var s *server.Server
+		s, err = server.NewServer(c.Cmd, g, log.New(out, "", log.LstdFlags))
 		if err != nil {
 			return fmt.Errorf("failed to start server: %w", err)
 		}
@@ -88,16 +90,24 @@ func (c Cmd) Run() (err error) {
 			}
 		}()
 
-		conn = s.ChannelConn()
+		channelConn := s.ChannelConn()
+		if channelConn == nil {
+			// the server encountered an error while starting up and is no
+			// longer listening for channel connections; we should return so
+			// that the serveErr will get surfaced to the user
+			return nil
+		}
+
+		conn = channelConn
 	} else {
 		// try to connect to the existing socket
-		conn, err = unixsocketconn.NewUnixSocketClientConn(c.UnixSocket)
+		conn, err = unixsocketconn.NewUnixSocketClientConn(g.UnixSocket)
 		if err != nil {
 			return fmt.Errorf("failed to connect to existing socket: %w", err)
 		}
 	}
 
-	tui, err := newTUI(c, conn)
+	tui, err := newTUI(c, g, conn)
 	if err != nil {
 		// this is our responsibility, but ignore the error because we already
 		// have an error to report

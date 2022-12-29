@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/protocol"
 	"mtoohey.com/q/internal/version"
 
@@ -18,6 +19,7 @@ import (
 type tui struct {
 	// constants
 	Cmd
+	cmd.Globals
 
 	// resources
 	screen tcell.Screen
@@ -63,10 +65,11 @@ type tui struct {
 // this function returns an error, conn will not be closed; it is the caller's
 // responsibility to close it in that scenario, if they no longer intend to use
 // it.
-func newTUI(cmd Cmd, conn protocol.Conn) (*tui, error) {
+func newTUI(cmd Cmd, g cmd.Globals, conn protocol.Conn) (*tui, error) {
 	t := &tui{
-		Cmd:  cmd,
-		conn: conn,
+		Cmd:     cmd,
+		Globals: g,
+		conn:    conn,
 	}
 
 	m, err := conn.Receive()

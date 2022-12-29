@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/protocol"
 	"mtoohey.com/q/internal/query"
 	"mtoohey.com/q/internal/server/channelconn"
@@ -17,7 +18,7 @@ import (
 
 type Server struct {
 	// constants
-	Constants
+	cmd.Globals
 	logger *log.Logger
 
 	// state
@@ -55,16 +56,16 @@ type Server struct {
 }
 
 // NewServer creates a new server.
-func NewServer(cmd Cmd, logger *log.Logger) (*Server, error) {
+func NewServer(cmd Cmd, g cmd.Globals, logger *log.Logger) (*Server, error) {
 	// This function directly accesses a lot of stuff that usually needs to
 	// have a mutex locked, or be accessed in an atomic way. This is fine
 	// because the server can only be accessed by the single routine that this
 	// function is running in, so there is no danger of races or other issues.
 
 	s := &Server{
-		Constants: cmd.Constants,
-		logger:    logger,
-		paused:    false,
+		Globals: g,
+		logger:  logger,
+		paused:  false,
 	}
 	s.repeat.Store(cmd.Repeat)
 	s.shuffle.Store(bool(cmd.Shuffle))

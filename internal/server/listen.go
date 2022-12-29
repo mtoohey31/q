@@ -13,6 +13,9 @@ import (
 	"github.com/faiface/beep/speaker"
 )
 
+// ChannelConn returns a channel connection to this server. It should be called
+// after Serve has begun, and may return nil if serve encounters an error while
+// starting up.
 func (s *Server) ChannelConn() *channelconn.ChannelConn {
 	return s.channelListener.Conn()
 }

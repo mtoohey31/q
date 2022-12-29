@@ -74,7 +74,7 @@ func (cl *ChannelListener) String() string {
 // Conn returns a new connection and returns the opposite end of the connection
 // through an ongoing to call to this Listener's Accept method. This function
 // will block if there is no ongoing Accept call. If the listener is closed
-// while this functions is blocked waiting for an accept call, it will return
+// while this function is blocked waiting for an accept call, it will return
 // nil.
 func (cl *ChannelListener) Conn() *ChannelConn {
 	cl.connMu.RLock()

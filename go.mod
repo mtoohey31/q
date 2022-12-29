@@ -3,6 +3,7 @@ module mtoohey.com/q
 go 1.18
 
 require (
+	github.com/adrg/xdg v0.4.0
 	github.com/alecthomas/kong v0.7.1
 	github.com/bogem/id3v2 v1.2.0
 	github.com/faiface/beep v1.1.0

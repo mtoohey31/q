@@ -8,13 +8,43 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/protocol"
 	"mtoohey.com/q/internal/server/unixsocketconn"
 	"mtoohey.com/q/internal/version"
 )
 
-func (c *Cmd) Run(ctx *kong.Context) (err error) {
-	conn, err := unixsocketconn.NewUnixSocketClientConn(c.UnixSocket)
+type Cmd struct {
+	State struct {
+		Template string `arg:"" optional:"" help:"Template using Go text/template syntax."`
+	} `cmd:"" default:"withargs" help:"Display current state."`
+
+	Play   struct{} `cmd:"" help:"Resume playback."`
+	Pause  struct{} `cmd:"" help:"Pause playback."`
+	Repeat struct {
+		RepeatState protocol.RepeatState `arg:"" help:"New repeat state."`
+	} `cmd:"" help:"Set repeat state."`
+	Shuffle struct {
+		ShuffleState protocol.ShuffleState `arg:"" type:"boolarg" help:"New shuffle state."`
+	} `cmd:"" help:"Set shuffle state."`
+	Skip struct {
+		Songs protocol.Skip `arg:"" default:"1" help:"Number of songs to skip."`
+	} `cmd:"" help:"Skip song(s)."`
+	Seek struct {
+		By string `arg:"" help:"Seek either +/- the current time, or absolutely if no prefix is given."`
+	} `cmd:"" help:"Seek within the current song."`
+	Remove struct {
+		Index int `arg:"" help:"Song index to remove from queue."`
+	} `cmd:"" help:"Remove a song from the queue."`
+	RemoveAll struct{} `cmd:"" help:"Remove all songs from the queue."`
+	Insert    struct {
+		Index int    `arg:"" help:"Index to insert song at."`
+		Path  string `arg:"" help:"Path of song to insert."`
+	} `cmd:"" help:"Add a song to the queue."`
+}
+
+func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
+	conn, err := unixsocketconn.NewUnixSocketClientConn(g.UnixSocket)
 	if err != nil {
 		return fmt.Errorf("failed to create connection: %w", err)
 	}
@@ -125,35 +155,4 @@ func (c *Cmd) Run(ctx *kong.Context) (err error) {
 	}
 
 	return nil
-}
-
-type Cmd struct {
-	UnixSocket string `short:"u" required:"" help:"Path of the socket to connect to."`
-
-	State struct {
-		Template string `arg:"" optional:"" help:"Template using Go text/template syntax."`
-	} `cmd:"" default:"withargs" help:"Display current state."`
-
-	Play   struct{} `cmd:"" help:"Resume playback."`
-	Pause  struct{} `cmd:"" help:"Pause playback."`
-	Repeat struct {
-		RepeatState protocol.RepeatState `arg:"" help:"New repeat state."`
-	} `cmd:"" help:"Set repeat state."`
-	Shuffle struct {
-		ShuffleState protocol.ShuffleState `arg:"" type:"boolarg" help:"New shuffle state."`
-	} `cmd:"" help:"Set shuffle state."`
-	Skip struct {
-		Songs protocol.Skip `arg:"" default:"1" help:"Number of songs to skip."`
-	} `cmd:"" help:"Skip song(s)."`
-	Seek struct {
-		By string `arg:"" help:"Seek either +/- the current time, or absolutely if no prefix is given."`
-	} `cmd:"" help:"Seek within the current song."`
-	Remove struct {
-		Index int `arg:"" help:"Song index to remove from queue."`
-	} `cmd:"" help:"Remove a song from the queue."`
-	RemoveAll struct{} `cmd:"" help:"Remove all songs from the queue."`
-	Insert    struct {
-		Index int    `arg:"" help:"Index to insert song at."`
-		Path  string `arg:"" help:"Path of song to insert."`
-	} `cmd:"" help:"Add a song to the queue."`
 }

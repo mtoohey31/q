@@ -1,3 +1,7 @@
+# github.com/adrg/xdg v0.4.0
+## explicit; go 1.14
+github.com/adrg/xdg
+github.com/adrg/xdg/internal/pathutil
 # github.com/alecthomas/kong v0.7.1
 ## explicit; go 1.18
 github.com/alecthomas/kong

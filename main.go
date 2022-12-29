@@ -13,10 +13,11 @@ import (
 )
 
 type cli struct {
+	cmd.Globals
 	Remote  remote.Cmd `cmd:"" aliases:"r" help:"Communicate with a server."`
 	Server  server.Cmd `cmd:"" aliases:"s" help:"Start a server in the background."`
 	Support track.Cmd  `cmd:"" aliases:"p" help:"Show info about supported formats."`
-	TUI     tui.Cmd    `cmd:"" aliases:"t" default:"withargs" help:"Start an interactive TUI."`
+	TUI     tui.Cmd    `cmd:"" aliases:"t" help:"Start an interactive TUI."`
 }
 
 func main() {
@@ -26,9 +27,10 @@ func main() {
 		kong.Description("A terminal music player."),
 	)...)
 
-	// TODO: support some sort of configuration file
-
-	ctx, err := parser.Parse(os.Args[1:])
+	globalsArgs, err := cmd.LoadGlobalsConfig()
 	parser.FatalIfErrorf(err)
-	parser.FatalIfErrorf(ctx.Run())
+
+	ctx, err := parser.Parse(append(globalsArgs, os.Args[1:]...))
+	parser.FatalIfErrorf(err)
+	parser.FatalIfErrorf(ctx.Run(flags.Globals))
 }
