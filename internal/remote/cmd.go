@@ -20,13 +20,17 @@ type Cmd struct {
 		Template string `arg:"" optional:"" help:"Template using Go text/template syntax."`
 	} `cmd:"" default:"withargs" help:"Display current state."`
 
-	Play   struct{} `cmd:"" help:"Resume playback."`
-	Pause  struct{} `cmd:"" help:"Pause playback."`
+	Pause struct {
+		PauseState *protocol.PauseState `arg:"" optional:"true" type:"boolarg" help:"New pause state."`
+		Cycle      bool                 `short:"c" help:"Cycle current pause state."`
+	} `cmd:"" help:"Pause playback."`
 	Repeat struct {
-		RepeatState protocol.RepeatState `arg:"" help:"New repeat state."`
+		RepeatState *protocol.RepeatState `arg:"" optional:"true" help:"New repeat state."`
+		Cycle       bool                  `short:"c" help:"Cycle current repeat state."`
 	} `cmd:"" help:"Set repeat state."`
 	Shuffle struct {
-		ShuffleState protocol.ShuffleState `arg:"" type:"boolarg" help:"New shuffle state."`
+		ShuffleState *protocol.ShuffleState `arg:"" optional:"true" type:"boolarg" help:"New shuffle state."`
+		Cycle        bool                   `short:"c" help:"Cycle current shuffle state."`
 	} `cmd:"" help:"Set shuffle state."`
 	Skip struct {
 		Songs protocol.Skip `arg:"" default:"1" help:"Number of songs to skip."`
@@ -107,17 +111,32 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 		}
 		return t.Execute(os.Stdout, state)
 
-	case "play":
-		m = protocol.PauseState(false)
-
 	case "pause":
-		m = protocol.PauseState(true)
+		if c.Pause.PauseState != nil {
+			m = c.Pause.PauseState
+		} else if c.Pause.Cycle {
+			m = !state.Pause
+		} else {
+			m = protocol.PauseState(true)
+		}
 
 	case "repeat":
-		m = c.Repeat.RepeatState
+		if c.Repeat.RepeatState != nil {
+			m = c.Repeat.RepeatState
+		} else if c.Repeat.Cycle {
+			m = state.Repeat.Next()
+		} else {
+			m = protocol.RepeatStateQueue
+		}
 
 	case "shuffle":
-		m = c.Shuffle.ShuffleState
+		if c.Shuffle.ShuffleState != nil {
+			m = c.Shuffle.ShuffleState
+		} else if c.Shuffle.Cycle {
+			m = !state.Shuffle
+		} else {
+			m = protocol.ShuffleState(true)
+		}
 
 	case "skip":
 		m = c.Skip.Songs

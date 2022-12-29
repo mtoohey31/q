@@ -18,13 +18,20 @@ var TypeMappers = []kong.Option{
 			return err
 		}
 
+		var v bool
 		switch s {
 		case "false":
-			target.Set(reflect.ValueOf(false).Convert(target.Type()))
+			v = false
 		case "true":
-			target.Set(reflect.ValueOf(true).Convert(target.Type()))
+			v = true
 		default:
 			return fmt.Errorf(`must be one of "false","true" but got "%s"`, s)
+		}
+
+		if target.Type().Kind() == reflect.Pointer {
+			target.Set(reflect.ValueOf(&v).Convert(target.Type()))
+		} else {
+			target.Set(reflect.ValueOf(v).Convert(target.Type()))
 		}
 
 		return nil
