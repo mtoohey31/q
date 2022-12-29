@@ -5,7 +5,7 @@ q: go.mod go.sum internal/version/version.txt vendor/modules.txt $(shell find . 
 	go build -o $@
 
 .PHONY: ci
-ci: fmt-check vet revive errcheck
+ci: all fmt-check vet revive errcheck
 
 .PHONY: fmt
 fmt:
