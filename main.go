@@ -6,6 +6,7 @@ import (
 	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/remote"
 	"mtoohey.com/q/internal/server"
+	"mtoohey.com/q/internal/track"
 	"mtoohey.com/q/internal/tui"
 
 	"github.com/alecthomas/kong"
@@ -14,7 +15,7 @@ import (
 type cli struct {
 	Remote  remote.Cmd `cmd:"" aliases:"r" help:"Communicate with a server."`
 	Server  server.Cmd `cmd:"" aliases:"s" help:"Start a server in the background."`
-	Support struct{}   `cmd:"" aliases:"p" help:"Show info about supported formats."`
+	Support track.Cmd  `cmd:"" aliases:"p" help:"Show info about supported formats."`
 	TUI     tui.Cmd    `cmd:"" aliases:"t" default:"withargs" help:"Start an interactive TUI."`
 }
 

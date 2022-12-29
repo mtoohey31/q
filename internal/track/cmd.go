@@ -2,7 +2,6 @@ package track
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/mattn/go-runewidth"
@@ -10,7 +9,9 @@ import (
 
 var header = [...]string{"format", "info", "cover", "lyrics", "metadata", "decode"}
 
-func PrintSupported(w io.Writer) error {
+type Cmd struct{}
+
+func (c *Cmd) Run() error {
 	boolToCheckOrX := func(b bool) string {
 		if b {
 			return "✓"
@@ -65,7 +66,7 @@ func PrintSupported(w io.Writer) error {
 	}
 
 	for _, row := range table {
-		if _, err := w.Write([]byte(strings.Join(append(row[:], "\n"), " "))); err != nil {
+		if _, err := fmt.Println(strings.Join(row[:], " ")); err != nil {
 			return fmt.Errorf("write failed: %w", err)
 		}
 	}
