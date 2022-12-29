@@ -81,7 +81,7 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 	case "state":
 		templateText := c.State.Template
 		if templateText == "" {
-			templateText = "{{ if .Pause }} {{else}}契{{end}}{{ if .NowPlaying }}{{ .NowPlaying.Title }}{{ if .NowPlaying.Artist }} - {{ .NowPlaying.Artist }}{{end}}{{else}}nothing playing{{end}}\n"
+			templateText = "{{ if .Pause }} {{else}}契 {{end}}{{ if .NowPlaying }}{{ .NowPlaying.Title }}{{ if .NowPlaying.Artist }} - {{ .NowPlaying.Artist }}{{end}}{{else}}nothing playing{{end}}\n"
 		} else {
 			// kong workaround: you can either set default:"" which only works
 			// for subcommands without arguments, or default:"withargs" which
