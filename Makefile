@@ -9,7 +9,7 @@ ci: fmt-check vet revive errcheck
 
 .PHONY: fmt
 fmt:
-	gofmt -w .
+	gofmt -w $$(find . -name vendor -prune -false -o -name '*.go')
 
 .PHONY: fmt-check
 fmt-check:
