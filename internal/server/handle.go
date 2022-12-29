@@ -41,6 +41,10 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 		// special case: when skipping zero places, we jump to the start of the
 		// now playing song
 		if m == 0 {
+			if s.streamer == nil {
+				break
+			}
+
 			if err := s.streamer.Seek(util.Clamp(
 				0,
 				s.format.SampleRate.N(time.Duration(m)),
