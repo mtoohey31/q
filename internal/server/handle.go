@@ -21,7 +21,7 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 		speaker.Lock()
 		s.pausedMu.Lock()
 		s.paused = m
-		speaker.Unlock()
+		s.pausedMu.Unlock()
 		speaker.Unlock()
 
 		s.broadcast(m)
