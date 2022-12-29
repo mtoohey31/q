@@ -7,20 +7,38 @@ func Clamp[T constraints.Ordered](min, v, max T) T {
 	return Max(min, Min(v, max))
 }
 
-// Max returns the larger value of a and b.
-func Max[T constraints.Ordered](a, b T) T {
-	if a > b {
-		return a
+// Min returns the largest provided argument. If no arguments are provided, it
+// returns the zero value for T.
+func Max[T constraints.Ordered](v ...T) T {
+	if len(v) == 0 {
+		var z T
+		return z
 	}
 
-	return b
+	max := v[0]
+	for _, o := range v[1:] {
+		if o > max {
+			max = o
+		}
+	}
+
+	return max
 }
 
-// Min returns the smaller value of a and b.
-func Min[T constraints.Ordered](a, b T) T {
-	if a < b {
-		return a
+// Min returns the smallest provided argument. If no arguments are provided, it
+// returns the zero value for T.
+func Min[T constraints.Ordered](v ...T) T {
+	if len(v) == 0 {
+		var z T
+		return z
 	}
 
-	return b
+	min := v[0]
+	for _, o := range v[1:] {
+		if o < min {
+			min = o
+		}
+	}
+
+	return min
 }

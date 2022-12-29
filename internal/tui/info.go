@@ -5,6 +5,7 @@ import (
 	"image"
 
 	"mtoohey.com/q/internal/protocol"
+	"mtoohey.com/q/internal/util"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -16,10 +17,9 @@ func (t *tui) drawInfoAndProgress() {
 		tX := t.drawString(t.infoMaxR.Min, t.infoMaxR.Max.X, t.NowPlaying.Title, styleDefault)
 		aX := t.drawString(t.infoMaxR.Min.Add(image.Pt(0, 1)), t.infoMaxR.Max.X, t.NowPlaying.Artist, styleDim)
 
-		stopX = tX
-		if aX > stopX {
-			stopX = aX
-		}
+		// the first argument ensures that we take up at least 5 cells so that
+		// the mode can be drawn properly
+		stopX = util.Max(t.infoMaxR.Min.X+5, tX, aX)
 
 		t.clear(image.Rect(tX, t.infoMaxR.Min.Y, t.infoMaxR.Max.X, t.infoMaxR.Min.Y+1))
 		t.clear(image.Rect(aX, t.infoMaxR.Min.Y+1, t.infoMaxR.Max.X, t.infoMaxR.Min.Y+2))
