@@ -11,7 +11,8 @@ func (t *tui) drawBottom(new, old image.Image) error {
 		return fmt.Errorf("failed to draw cover: %w", err)
 	}
 
-	t.infoMaxR = image.Rect(stopX+1, t.bottomR.Min.Y, t.bottomR.Max.X, t.bottomR.Max.Y-1)
+	infoMinX := stopX + 1
+	t.infoMaxR = image.Rect(infoMinX, t.bottomR.Min.Y, infoMinX+((t.bottomR.Max.X-infoMinX)/3), t.bottomR.Max.Y-1)
 
 	t.drawInfoAndProgress()
 
