@@ -17,7 +17,7 @@ type cli struct {
 	Remote  remote.Cmd `cmd:"" aliases:"r" help:"Communicate with a server."`
 	Server  server.Cmd `cmd:"" aliases:"s" help:"Start a server in the background."`
 	Support track.Cmd  `cmd:"" aliases:"p" help:"Show info about supported formats."`
-	TUI     tui.Cmd    `cmd:"" aliases:"t" help:"Start an interactive TUI."`
+	TUI     tui.Cmd    `cmd:"" default:"withargs" aliases:"t" help:"Start an interactive TUI."`
 }
 
 func main() {
