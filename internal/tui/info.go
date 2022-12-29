@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"image"
 
-	"github.com/gdamore/tcell/v2"
 	"mtoohey.com/q/internal/protocol"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 func (t *tui) drawInfoAndProgress() {

@@ -7,11 +7,12 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/alecthomas/kong"
 	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/protocol"
 	"mtoohey.com/q/internal/server/unixsocketconn"
 	"mtoohey.com/q/internal/version"
+
+	"github.com/alecthomas/kong"
 )
 
 type Cmd struct {
