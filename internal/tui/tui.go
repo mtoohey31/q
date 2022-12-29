@@ -184,8 +184,6 @@ func (t *tui) loop() (err error) {
 		}
 	}()
 
-	errCh := make(chan error)
-	defer close(errCh)
 	var errTimeoutCancel chan struct{}
 	defer func() {
 		if errTimeoutCancel != nil {
@@ -193,52 +191,45 @@ func (t *tui) loop() (err error) {
 			errTimeoutCancel = nil
 		}
 	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		for {
-			err, ok := <-errCh
-			if !ok {
-				return
-			}
-			// if there's an existing timeout routine running, stop it
-			if errTimeoutCancel != nil {
-				close(errTimeoutCancel)
-			}
-
-			// set the new error
-			t.visibleErr = err
-			t.drawError()
-			t.screen.Show()
-
-			// start a new timeout routine
-			errTimeoutCancel = make(chan struct{})
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
-				select {
-				case <-time.After(time.Second * 3):
-					t.visibleErr = nil
-					errTimeoutCancel = nil
-					t.drawError()
-					t.screen.Show()
-				case <-errTimeoutCancel:
-				}
-			}()
+	clearErrCh := make(chan struct{})
+	setNewErr := func(err error) {
+		// if there's an existing timeout routine running, stop it
+		if errTimeoutCancel != nil {
+			close(errTimeoutCancel)
 		}
-	}()
+
+		// set the new error
+		t.visibleErr = err
+		t.drawError()
+
+		// start a new timeout routine
+		errTimeoutCancel = make(chan struct{})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			select {
+			case <-time.After(time.Second * 3):
+				clearErrCh <- struct{}{}
+			case <-errTimeoutCancel:
+			}
+		}()
+	}
 
 	for {
 		select {
 		case err := <-serverErrorCh:
 			return fmt.Errorf("server connection lost: %w", err)
 
+		case <-clearErrCh:
+			t.visibleErr = nil
+			errTimeoutCancel = nil
+			t.drawError()
+
 		case m := <-serverMessageCh:
 			switch m := m.(type) {
 			case protocol.Error:
-				errCh <- m
+				setNewErr(m)
 
 			case protocol.ProgressState:
 				t.Progress = m
@@ -276,7 +267,7 @@ func (t *tui) loop() (err error) {
 				t.clipboardPath = string(m)
 
 			default:
-				errCh <- fmt.Errorf("unhandled message type: %T", m)
+				setNewErr(fmt.Errorf("unhandled message type: %T", m))
 			}
 
 		case ev := <-screenEvCh:
