@@ -6,20 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
 	"syscall"
 
 	"mtoohey.com/q/internal/protocol"
 )
 
 type unixSocketConn struct {
-	uc *net.UnixConn
-	// decMu protects dec.
-	decMu sync.Mutex
-	dec   *gob.Decoder
-	// encMu protects enc.
-	encMu sync.Mutex
-	enc   *gob.Encoder
+	uc  *net.UnixConn
+	dec *gob.Decoder
+	enc *gob.Encoder
 }
 
 func (usc *unixSocketConn) Close() error {
@@ -31,9 +26,6 @@ func (usc *unixSocketConn) Close() error {
 }
 
 func (usc *unixSocketConn) Receive() (protocol.Message, error) {
-	usc.decMu.Lock()
-	defer usc.decMu.Unlock()
-
 	var m any
 	if err := usc.dec.Decode(&m); err != nil {
 		if errors.Is(err, io.EOF) {
@@ -47,9 +39,6 @@ func (usc *unixSocketConn) Receive() (protocol.Message, error) {
 }
 
 func (usc *unixSocketConn) Send(m protocol.Message) error {
-	usc.encMu.Lock()
-	defer usc.encMu.Unlock()
-
 	if err := usc.enc.Encode(&m); err != nil {
 		var eno syscall.Errno
 		if errors.As(err, &eno); eno == 32 {
