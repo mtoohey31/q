@@ -244,9 +244,9 @@ func (s *Server) skipLocked(drop bool) {
 			// special case: we should try to avoid putting the current track
 			// next and playing it twice in a row
 
-			insertIdx = rand(s.shuffleIdx+1, len(s.queue))
+			insertIdx = rand(s.shuffleIdx+1, len(s.queue)+1)
 		} else {
-			insertIdx = rand(s.shuffleIdx, len(s.queue))
+			insertIdx = rand(s.shuffleIdx, len(s.queue)+1)
 		}
 
 		s.queue = append(s.queue[1:insertIdx], append([]*track.Track{s.queue[0]}, s.queue[insertIdx:]...)...)

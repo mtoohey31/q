@@ -150,10 +150,10 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 			return
 		}
 
-		s.queue = append(s.queue[:m.Index], append([]*track.Track{{Path: m.Path}}, s.queue[m.Index:]...)...)
-		if m.Index <= s.shuffleIdx {
+		if m.Index <= s.shuffleIdx && len(s.queue) != 0 {
 			s.shuffleIdx++
 		}
+		s.queue = append(s.queue[:m.Index], append([]*track.Track{{Path: m.Path}}, s.queue[m.Index:]...)...)
 
 		if m.Index == 0 {
 			speaker.Lock()
