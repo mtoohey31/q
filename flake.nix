@@ -12,8 +12,14 @@
         pname = "q";
         version = builtins.readFile ./internal/version/version.txt;
         src = ./.;
-        buildInputs = [ final.alsa-lib ];
-        nativeBuildInputs = [ final.pkg-config ];
+        buildInputs =
+          if final.stdenv.hostPlatform.isDarwin then
+            with final.darwin.apple_sdk_11_0.frameworks;
+            [ AppKit AudioToolbox ]
+          else [ final.alsa-lib ];
+        nativeBuildInputs =
+          if final.stdenv.hostPlatform.isDarwin
+          then [ ] else [ final.pkg-config ];
         vendorSha256 = null;
       };
     };
@@ -50,8 +56,17 @@
     packages.default = q;
 
     devShells = rec {
-      ci = mkShell {
-        packages = [ go pkg-config alsa-lib errcheck revive ];
+      ci = (
+        if stdenv.hostPlatform.isDarwin
+        then mkShell.override { inherit (darwin.apple_sdk_11_0) stdenv; }
+        else mkShell
+      ) {
+        packages = [ go errcheck revive ] ++ (
+          if stdenv.hostPlatform.isDarwin then
+            with darwin.apple_sdk_11_0.frameworks;
+            [ AppKit AudioToolbox ]
+          else [ pkg-config alsa-lib ]
+        );
       };
 
       default = ci.overrideAttrs (oldAttrs: {

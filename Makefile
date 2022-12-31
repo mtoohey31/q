@@ -26,3 +26,11 @@ revive:
 .PHONY: errcheck
 errcheck:
 	errcheck ./...
+
+.PHONY: clean
+clean:
+	rm -f q result
+
+.PHONY: clean-all
+clean-all: clean
+	go clean -cache -modcache
