@@ -151,8 +151,9 @@ func (s *Server) streamLocked(samples [][2]float64) (n int, ok bool) {
 		if !ok {
 			// if the streamer failed, warn and set err so that we'll skip
 			// below
-			err = s.streamer.Err()
-			s.broadcastErr(fmt.Errorf("streamer failed: %w", err))
+			if err = s.streamer.Err(); err != nil {
+				s.broadcastErr(fmt.Errorf("streamer failed: %w", err))
+			}
 		}
 
 		// if the streamer didn't fill samples, try skipping to the next song
@@ -160,7 +161,7 @@ func (s *Server) streamLocked(samples [][2]float64) (n int, ok bool) {
 			// if we ran into an error with the current streamer, drop it from
 			// the queue, regardless of the repeat setting
 			s.queueMu.Lock()
-			s.skipLocked(true)
+			s.skipLocked(err != nil)
 			s.queueMu.Unlock()
 
 			// recursively continue streaming after the skip to avoid silence,
