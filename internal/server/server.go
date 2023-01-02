@@ -241,12 +241,15 @@ func (s *Server) skipLocked(drop bool) {
 		// and the 1 case is handled in by that further above case.
 
 		var insertIdx int
-		if s.shuffleIdx == 1 {
+		switch s.shuffleIdx {
+		case 0, 1:
 			// special case: we should try to avoid putting the current track
-			// next and playing it twice in a row
+			// next and playing it twice in a row if shuffleIdx is 0 or 1, and
+			// we also have to ensure in the case where it's 0 that insertIdx
+			// won't be 0 leading to invalid indexing below
 
-			insertIdx = rand(s.shuffleIdx+1, len(s.queue)+1)
-		} else {
+			insertIdx = rand(2, len(s.queue)+1)
+		default:
 			insertIdx = rand(s.shuffleIdx, len(s.queue)+1)
 		}
 
