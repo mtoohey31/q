@@ -12,6 +12,10 @@ import (
 	"github.com/alecthomas/kong"
 )
 
+// TODO: volume normalization
+
+// TODO: song gap normalization
+
 type cli struct {
 	cmd.Globals
 	Remote  remote.Cmd `cmd:"" aliases:"r" help:"Communicate with a server."`
