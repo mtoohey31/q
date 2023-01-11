@@ -33,7 +33,13 @@ func (t *tui) drawQueue() {
 		if i+t.queueScrollIdx == t.queueFocusIdx {
 			style = style.Background(tcell.ColorAqua).Foreground(tcell.ColorBlack)
 		}
+
+		if i+1 == int(t.ShuffleIdx) {
+			style = style.Underline(true)
+		}
+
 		t.draw(t.queueR.Min.Add(image.Pt(0, i)), ' ', style)
+
 		x := t.drawString(t.queueR.Min.Add(image.Pt(1, i)), t.queueR.Max.X-1, string(t.Queue[i+t.queueScrollIdx]), style)
 		for ; x < t.queueR.Max.X; x++ {
 			t.draw(image.Pt(x, i), ' ', style)

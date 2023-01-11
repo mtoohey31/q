@@ -108,7 +108,7 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 		removed := protocol.Removed(s.queue[removeIdx].Path)
 
 		s.queue = append(s.queue[:removeIdx], s.queue[removeIdx+1:]...)
-		if removeIdx < s.shuffleIdx {
+		if removeIdx < int(s.shuffleIdx) {
 			s.decShuffleIdxLocked()
 		}
 
@@ -150,7 +150,7 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 			return
 		}
 
-		if m.Index <= s.shuffleIdx && len(s.queue) != 0 {
+		if m.Index <= int(s.shuffleIdx) && len(s.queue) != 0 {
 			s.shuffleIdx++
 		}
 		s.queue = append(s.queue[:m.Index], append([]*track.Track{{Path: m.Path}}, s.queue[m.Index:]...)...)

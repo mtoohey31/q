@@ -143,6 +143,7 @@ func (s *Server) getQueue() protocol.QueueState {
 // broadcastQueue sends the current queue to all clients.
 func (s *Server) broadcastQueue() {
 	s.broadcast(s.getQueue())
+	s.broadcast(s.shuffleIdx)
 }
 
 // getQueue retrieves the current State.
@@ -161,6 +162,7 @@ func (s *Server) getState() protocol.State {
 		Progress:   s.getProgress(),
 		Repeat:     s.repeat.Load().(protocol.RepeatState),
 		Shuffle:    protocol.ShuffleState(s.shuffle.Load()),
+		ShuffleIdx: s.shuffleIdx,
 		Queue:      s.getQueue(),
 		Version:    protocol.Version,
 	}

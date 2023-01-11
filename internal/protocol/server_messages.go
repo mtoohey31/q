@@ -25,6 +25,7 @@ func init() {
 	gob.Register(&image.NYCbCrA{})
 	gob.Register(NowPlayingState{})
 	gob.Register(ProgressState{})
+	gob.Register(ShuffleIdxState(0))
 	gob.Register(QueueState{})
 	gob.Register(Removed(""))
 }
@@ -53,6 +54,9 @@ type State struct {
 
 	// Shuffle is the current shuffle state.
 	Shuffle ShuffleState
+
+	// ShuffleIdx is the current position of the shuffle index.
+	ShuffleIdx ShuffleIdxState
 
 	// Queue is the current queue state.
 	Queue QueueState
@@ -86,6 +90,10 @@ type ProgressState struct {
 	// Total is the total length of the song.
 	Total time.Duration
 }
+
+// ShuffleIdxState is the index within the queue of the first song that was
+// played during the current repeat of the queue.
+type ShuffleIdxState int
 
 // QueueState contains information about the current queue.
 type QueueState []QueueItem

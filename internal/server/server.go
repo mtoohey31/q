@@ -35,7 +35,7 @@ type Server struct {
 	// shuffleIdx is the index within the queue of the first song that was
 	// played during this repeat of the queue. It may be 0 if no songs have yet
 	// been finished on this repeat.
-	shuffleIdx int
+	shuffleIdx protocol.ShuffleIdxState
 	queue      []*track.Track
 
 	// resources
@@ -190,7 +190,7 @@ func (*Server) Err() error {
 func (s *Server) decShuffleIdxLocked() {
 	newIdx := s.shuffleIdx - 1
 	if newIdx < 0 {
-		newIdx = len(s.queue) - 1
+		newIdx = protocol.ShuffleIdxState(len(s.queue)) - 1
 	}
 	s.shuffleIdx = newIdx
 }
@@ -250,7 +250,7 @@ func (s *Server) skipLocked(drop bool) {
 
 			insertIdx = rand(2, len(s.queue)+1)
 		default:
-			insertIdx = rand(s.shuffleIdx, len(s.queue)+1)
+			insertIdx = rand(int(s.shuffleIdx), len(s.queue)+1)
 		}
 
 		s.queue = append(s.queue[1:insertIdx], append([]*track.Track{s.queue[0]}, s.queue[insertIdx:]...)...)
