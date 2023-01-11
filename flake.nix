@@ -10,7 +10,7 @@
     overlays.default = final: _: {
       q = final.buildGoModule {
         pname = "q";
-        version = builtins.readFile ./internal/version/version.txt;
+        version = "0.1.0";
         src = ./.;
         buildInputs =
           if final.stdenv.hostPlatform.isDarwin then

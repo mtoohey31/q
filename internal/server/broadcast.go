@@ -6,7 +6,6 @@ import (
 	"net"
 
 	"mtoohey.com/q/internal/protocol"
-	"mtoohey.com/q/internal/version"
 )
 
 // broadcast sends the given message out to all clients.
@@ -163,6 +162,6 @@ func (s *Server) getState() protocol.State {
 		Repeat:     s.repeat.Load().(protocol.RepeatState),
 		Shuffle:    protocol.ShuffleState(s.shuffle.Load()),
 		Queue:      s.getQueue(),
-		Version:    version.Version,
+		Version:    protocol.Version,
 	}
 }

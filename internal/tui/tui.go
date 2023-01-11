@@ -11,7 +11,6 @@ import (
 
 	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/protocol"
-	"mtoohey.com/q/internal/version"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -83,9 +82,9 @@ func newTUI(cmd Cmd, g cmd.Globals, conn protocol.Conn) (*tui, error) {
 		return nil, fmt.Errorf("initial message was of unexpected type %T", m)
 	}
 
-	if t.State.Version != version.Version {
+	if t.State.Version != protocol.Version {
 		return nil, fmt.Errorf(`server version "%s" does not match tui version "%s"`,
-			t.State.Version, version.Version)
+			t.State.Version, protocol.Version)
 	}
 
 	t.screen, err = tcell.NewScreen()

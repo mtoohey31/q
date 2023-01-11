@@ -11,7 +11,6 @@ import (
 	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/protocol"
 	"mtoohey.com/q/internal/server/unixsocketconn"
-	"mtoohey.com/q/internal/version"
 
 	"github.com/alecthomas/kong"
 )
@@ -71,9 +70,9 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 		return fmt.Errorf("initial message was of unexpected type %T", im)
 	}
 
-	if state.Version != version.Version {
+	if state.Version != protocol.Version {
 		return fmt.Errorf(`server version "%s" does not match remote version "%s"`,
-			state.Version, version.Version)
+			state.Version, protocol.Version)
 	}
 
 	var m protocol.Message
