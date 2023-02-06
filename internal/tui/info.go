@@ -82,5 +82,6 @@ func (m mode) Style() tcell.Style {
 }
 
 func (t *tui) drawMode() {
-	t.drawString(t.modeR.Min, t.modeR.Max.X, t.mode.String(), t.mode.Style())
+	stopX := t.drawString(t.modeR.Min, t.modeR.Max.X, t.mode.String(), t.mode.Style())
+	t.clear(image.Rect(stopX, t.modeR.Min.Y, t.modeR.Max.X, t.modeR.Max.Y))
 }
