@@ -12,8 +12,7 @@ import (
 
 func (t *tui) drawInfoAndProgress() {
 	stopX := t.infoMaxR.Min.X
-	var zeroNowPlaying protocol.NowPlayingState
-	if t.NowPlaying != zeroNowPlaying {
+	if t.NowPlaying != (protocol.NowPlayingState{}) {
 		tX := t.drawString(t.infoMaxR.Min, t.infoMaxR.Max.X, t.NowPlaying.Title, styleDefault)
 		aX := t.drawString(t.infoMaxR.Min.Add(image.Pt(0, 1)), t.infoMaxR.Max.X, t.NowPlaying.Artist, styleDim)
 
@@ -29,7 +28,10 @@ func (t *tui) drawInfoAndProgress() {
 	t.modeR = image.Rect(t.infoMaxR.Min.X, t.bottomR.Max.Y-1, stopX, t.bottomR.Max.Y)
 	t.drawMode()
 
-	t.progressR = image.Rect(stopX+1, t.bottomR.Min.Y, t.bottomR.Max.X, t.bottomR.Max.Y)
+	t.progressR = image.Rect(stopX+3, t.bottomR.Min.Y, t.bottomR.Max.X, t.bottomR.Max.Y)
+
+	// clear the block between the info and the progress
+	t.clear(image.Rect(stopX, t.bottomR.Min.Y, t.progressR.Min.X, t.bottomR.Max.Y))
 
 	lineR := image.Rect(t.progressR.Min.X, t.progressR.Min.Y, t.progressR.Max.X, t.progressR.Min.Y+1)
 	// clear top row, since point draws won't
