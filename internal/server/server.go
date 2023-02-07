@@ -50,7 +50,7 @@ type Server struct {
 	// clientsMu protects clients.
 	clientsMu sync.RWMutex
 	clients   []protocol.Conn
-	// disconnected recieves clients that have disconnected and should be
+	// disconnected receives clients that have disconnected and should be
 	// removed.
 	disconnected chan protocol.Conn
 	// closedMu protects closed.

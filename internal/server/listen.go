@@ -191,7 +191,7 @@ func (s *Server) Serve() (err error) {
 			// this is always the first message that a client gets
 			if err := c.Send(s.getState()); err != nil {
 				if errors.Is(err, net.ErrClosed) {
-					s.logger.Printf("client %s disconnected before recieving initial message: %s", c, err)
+					s.logger.Printf("client %s disconnected before receiving initial message: %s", c, err)
 				} else {
 					s.logger.Printf("failed to send initial message to client %s: %s", c, err)
 

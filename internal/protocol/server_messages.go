@@ -62,7 +62,7 @@ type State struct {
 	Queue QueueState
 
 	// Version is the version of the server. This should be checked to ensure
-	// compatability with the client.
+	// compatibility with the client.
 	Version string
 }
 

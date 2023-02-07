@@ -15,7 +15,7 @@ type Listener interface {
 
 	// Accept blocks and accepts the next client connection.
 	//
-	// It should return an error satsifying errors.Is(err, net.ErrClosed) when
+	// It should return an error satisfying errors.Is(err, net.ErrClosed) when
 	// the Listener is closed.
 	Accept() (Conn, error)
 

@@ -22,7 +22,7 @@ type ChannelConn struct {
 	// Close or because the other end of the connection was closed.
 	closed chan struct{}
 
-	// receive recieves messages. It may be closed by the other end to indicate
+	// receive receives messages. It may be closed by the other end to indicate
 	// that the connection has been closed.
 	receive <-chan protocol.Message
 	// sendMu protects send. In this context, sending to the channel is

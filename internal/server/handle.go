@@ -14,7 +14,7 @@ import (
 
 // handle handles a single incoming message.
 func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
-	s.logger.Printf("recieved message of type %T: %#v", m, m)
+	s.logger.Printf("received message of type %T: %#v", m, m)
 
 	switch m := m.(type) {
 	case protocol.PauseState:
