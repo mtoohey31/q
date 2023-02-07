@@ -3,14 +3,14 @@ module mtoohey.com/q
 go 1.18
 
 require (
-	github.com/adrg/xdg v0.4.0
-	github.com/alecthomas/kong v0.7.1
-	github.com/bogem/id3v2 v1.2.0
-	github.com/faiface/beep v1.1.0
-	github.com/gdamore/tcell/v2 v2.5.3
-	github.com/lithammer/fuzzysearch v1.1.5
-	github.com/mattn/go-runewidth v0.0.13
-	golang.org/x/exp v0.0.0-20221217163422-3c43f8badb15
+	github.com/adrg/xdg v0.4.0 // MIT
+	github.com/alecthomas/kong v0.7.1 // MIT
+	github.com/bogem/id3v2 v1.2.0 // MIT
+	github.com/faiface/beep v1.1.0 // MIT
+	github.com/gdamore/tcell/v2 v2.5.3 // Apache-2.0
+	github.com/lithammer/fuzzysearch v1.1.5 // MIT
+	github.com/mattn/go-runewidth v0.0.13 // MIT
+	golang.org/x/exp v0.0.0-20221217163422-3c43f8badb15 // BSD-3-Clause
 )
 
 require (
