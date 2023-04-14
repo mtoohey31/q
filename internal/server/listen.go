@@ -222,8 +222,11 @@ func (s *Server) Serve() (err error) {
 						_ = c.Close()
 					}
 
-					// drop the client
-					s.disconnected <- c
+					// try to drop the client
+					select {
+					case s.disconnected <- c:
+					case <-s.closed:
+					}
 					return
 				}
 
@@ -243,8 +246,11 @@ func (s *Server) Serve() (err error) {
 						_ = c.Close()
 					}
 
-					// drop the client
-					s.disconnected <- c
+					// try to drop the client
+					select {
+					case s.disconnected <- c:
+					case <-s.closed:
+					}
 					return
 				}
 			}
