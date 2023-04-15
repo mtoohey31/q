@@ -34,7 +34,10 @@ func (t *tui) drawQueue() {
 			style = style.Background(tcell.ColorAqua).Foreground(tcell.ColorBlack)
 		}
 
-		if i+1 == int(t.ShuffleIdx) {
+		shuffleIdxIsNext := i+t.queueScrollIdx+1 == int(t.ShuffleIdx)
+		iIsLast := i+t.queueScrollIdx == len(t.Queue)-1
+		shuffleIdxIsFirst := t.ShuffleIdx == 0
+		if shuffleIdxIsNext || (iIsLast && shuffleIdxIsFirst) {
 			style = style.Underline(true)
 		}
 
