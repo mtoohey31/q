@@ -15,7 +15,7 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-//go:embed state_default.tmpl
+//go:embed state_default.gotmpl
 var defaultTemplateText string
 
 type Cmd struct {
