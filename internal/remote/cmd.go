@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"text/template"
 	"time"
 
@@ -20,9 +19,20 @@ import (
 var defaultTemplateText string
 
 type Cmd struct {
-	State struct {
+	// StateDefault works around the kong restriction that you can either have a
+	// subcommand with no arguments that is the default when there are no
+	// arguments, or a subcommand with arguments that is the default even when
+	// there are arguments (as long as they match), but you can't have a
+	// subcommand with arguments that is the default only when there are no
+	// arguments, which is what we want, because if we pass state a
+	// non-subcommand first argument, it uses that as the template which usually
+	// means it's just echoing back the same string which is super confusing. So
+	// instead we define a separate, hidden state subcommnd which is the default
+	// only when there are no arguments.
+	StateDefault struct{} `cmd:"" hidden:"" default:"1"`
+	State        struct {
 		Template string `arg:"" optional:"" help:"Template using Go text/template syntax."`
-	} `cmd:"" default:"withargs" help:"Display current state."`
+	} `cmd:"" help:"Display current state."`
 
 	Pause struct {
 		PauseState *protocol.PauseState `arg:"" optional:"true" type:"boolarg" help:"New pause state."`
@@ -83,33 +93,11 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 	}
 
 	var m protocol.Message
-	command := strings.Split(ctx.Command(), " ")[1]
-	switch command {
-	case "state":
+	switch ctx.Command() {
+	case "remote state", "remote state-default":
 		templateText := c.State.Template
 		if templateText == "" {
 			templateText = defaultTemplateText
-		} else {
-			// kong workaround: you can either set default:"" which only works
-			// for subcommands without arguments, or default:"withargs" which
-			// executes the command even if there are arguments and they are
-			// provided. the behahviour we want here is for this subcommand to
-			// be used by default only when no arguments are provided, so we
-			// check here that "state" was in the original arguments when the
-			// template is non-empty, because otherwise this results in the
-			// very confusing behaviour of just printing the user's argument
-			// back out for them..
-
-			stateFound := false
-			for _, arg := range ctx.Args {
-				if arg == "state" {
-					stateFound = true
-					break
-				}
-			}
-			if !stateFound {
-				return fmt.Errorf("expected subcommand")
-			}
 		}
 
 		t, err := template.New("state").Parse(templateText)
@@ -118,7 +106,7 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 		}
 		return t.Execute(os.Stdout, state)
 
-	case "pause":
+	case "remote pause", "remote pause <pause-state>":
 		if c.Pause.PauseState != nil {
 			m = c.Pause.PauseState
 		} else if c.Pause.Cycle {
@@ -127,7 +115,7 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 			m = protocol.PauseState(true)
 		}
 
-	case "repeat":
+	case "remote repeat", "remote repeat <repeat-state>":
 		if c.Repeat.RepeatState != nil {
 			m = c.Repeat.RepeatState
 		} else if c.Repeat.Cycle {
@@ -136,7 +124,7 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 			m = protocol.RepeatStateQueue
 		}
 
-	case "shuffle":
+	case "remote shuffle", "remote shuffle <shuffle-state>":
 		if c.Shuffle.ShuffleState != nil {
 			m = c.Shuffle.ShuffleState
 		} else if c.Shuffle.Cycle {
@@ -145,10 +133,10 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 			m = protocol.ShuffleState(true)
 		}
 
-	case "skip":
+	case "remote skip", "remote skip <songs>":
 		m = c.Skip.Songs
 
-	case "seek":
+	case "remote seek <by>":
 		d, err := time.ParseDuration(c.Seek.By)
 		if err != nil {
 			return err
@@ -161,13 +149,13 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 		}
 		m = protocol.Seek(d)
 
-	case "remove":
+	case "remote remove <index>":
 		m = protocol.Remove(c.Remove.Index)
 
-	case "remove-all":
+	case "remote remove-all":
 		m = protocol.RemoveAll{}
 
-	case "insert":
+	case "remote insert <index> <path>":
 		absPath, err := filepath.Abs(c.Insert.Path)
 		if err != nil {
 			return fmt.Errorf("failed to create absolute path: %w", err)
@@ -178,11 +166,11 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 			Path:  absPath,
 		}
 
-	case "later":
+	case "remote later <index>":
 		m = protocol.Later(c.Later.Index)
 
 	default:
-		panic(fmt.Sprintf(`unhandled command "%s"`, command))
+		panic(fmt.Sprintf(`unhandled command "%s"`, ctx.Command()))
 	}
 
 	if err := conn.Send(m); err != nil {
