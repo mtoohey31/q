@@ -195,6 +195,38 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 		s.broadcastQueue()
 
+	case protocol.Later:
+		s.queueMu.Lock()
+
+		laterIdx := int(m)
+		if laterIdx >= len(s.queue)-1 || 0 > laterIdx {
+			s.queueMu.Unlock()
+			respond(protocol.Error(fmt.Sprintf("invalid index for later request: %d", m)))
+			return
+		}
+
+		if s.shuffle.Load() {
+			insertIdx := rand(laterIdx+2, len(s.queue)+1)
+			s.queue = append(s.queue[:laterIdx],
+				append(s.queue[laterIdx+1:insertIdx],
+					append([]*track.Track{s.queue[laterIdx]},
+						s.queue[insertIdx:]...)...)...)
+		} else {
+			s.queue = append(s.queue[:laterIdx], append(s.queue[laterIdx+1:], s.queue[laterIdx])...)
+		}
+
+		if laterIdx == 0 {
+			speaker.Lock()
+			s.streamerMu.Lock()
+			s.playQueueTopLocked() // broadcasts new now playing
+			s.streamerMu.Unlock()
+			speaker.Unlock()
+		}
+
+		s.queueMu.Unlock()
+
+		s.broadcastQueue()
+
 	default:
 		respond(protocol.Error(fmt.Sprintf("invalid request type: %T", m)))
 	}
