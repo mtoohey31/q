@@ -1,7 +1,7 @@
 .PHONY: all
 all: q
 
-q: go.mod go.sum vendor/modules.txt $(shell find . -type d -o -name '*.go')
+q: go.mod go.sum vendor/modules.txt $(shell find . -type d -o -name '*.go' -o -name '*.tmpl')
 	go build -o $@
 
 .PHONY: ci

@@ -1,6 +1,7 @@
 package remote
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,9 @@ import (
 
 	"github.com/alecthomas/kong"
 )
+
+//go:embed state_default.tmpl
+var defaultTemplateText string
 
 type Cmd struct {
 	State struct {
@@ -84,7 +88,7 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 	case "state":
 		templateText := c.State.Template
 		if templateText == "" {
-			templateText = "{{ if .Pause }}契 {{else}} {{end}}{{ if .NowPlaying }}{{ .NowPlaying.Title }}{{ if .NowPlaying.Artist }} - {{ .NowPlaying.Artist }}{{end}}{{else}}nothing playing{{end}}\n"
+			templateText = defaultTemplateText
 		} else {
 			// kong workaround: you can either set default:"" which only works
 			// for subcommands without arguments, or default:"withargs" which
