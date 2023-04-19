@@ -162,10 +162,15 @@ func (t *tui) loop() (err error) {
 	}()
 
 	// spawn message receive routine
-	serverMessageCh := make(chan protocol.Message)
-	// buffered so the final net.ErrClosed can be sent without deadlocking on
-	// shutdown, though it won't ever be read
-	serverErrorCh := make(chan error, 1)
+
+	// buffered so that we don't get stuck trying to send messages to the
+	// server, but it's not receiving because it's trying to send and we're not
+	// listening
+	serverMessageCh := make(chan protocol.Message, 128)
+	// buffered for the same reason as above, and also so that the final
+	// net.ErrClosed can be sent without deadlocking on shutdown, though it
+	// won't ever be read
+	serverErrorCh := make(chan error, 128)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
