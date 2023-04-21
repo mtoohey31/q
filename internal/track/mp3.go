@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	//revive:disable
 	_ "image/jpeg"
 	_ "image/png"
-	//revive:enable
 	"io"
 
 	"github.com/bogem/id3v2"

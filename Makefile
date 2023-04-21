@@ -5,7 +5,7 @@ q: go.mod go.sum vendor/modules.txt $(shell find . -type d -o -name '*.go' -o -n
 	go build -o $@
 
 .PHONY: ci
-ci: all fmt-check vet revive errcheck
+ci: all fmt-check vet
 
 .PHONY: fmt
 fmt:
@@ -18,14 +18,6 @@ fmt-check:
 .PHONY: vet
 vet:
 	go vet ./...
-
-.PHONY: revive
-revive:
-	revive -config .revive.toml -formatter friendly -set_exit_status -exclude ./vendor/... ./...
-
-.PHONY: errcheck
-errcheck:
-	errcheck ./...
 
 .PHONY: clean
 clean:

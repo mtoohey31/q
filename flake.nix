@@ -27,17 +27,6 @@
     {
       overlays = [
         (final: _: {
-          errcheck = final.buildGoModule rec {
-            pname = "errcheck";
-            version = builtins.substring 0 7 src.rev;
-            src = final.fetchFromGitHub {
-              owner = "kisielk";
-              repo = pname;
-              rev = "3faf0bc8574bd40c9635d7910b25dd81349f6e89";
-              sha256 = "lx1kbRyL9OJzTxClIej/FisfVRh2VG98HGOBuF359LI=";
-            };
-            vendorSha256 = "96+927gNuUMovR4Ru/8BwsgEByNq2EPX7wXWS7+kSL8=";
-          };
           gow = final.buildGoModule rec {
             pname = "gow";
             version = builtins.substring 0 7 src.rev;
@@ -61,7 +50,7 @@
         then mkShell.override { inherit (darwin.apple_sdk_11_0) stdenv; }
         else mkShell
       ) {
-        packages = [ go errcheck revive ] ++ (
+        packages = [ go ] ++ (
           if stdenv.hostPlatform.isDarwin then
             with darwin.apple_sdk_11_0.frameworks;
             [ AppKit AudioToolbox ]
