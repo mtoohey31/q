@@ -15,13 +15,13 @@ type runeStylePair struct {
 
 func (t *tui) initIndicatorRunes() {
 	t.shuffleRune = 's'
-	if t.screen.CanDisplay('列', false) {
-		t.shuffleRune = '列'
+	if t.screen.CanDisplay('󰒝', false) {
+		t.shuffleRune = '󰒝'
 	}
 
 	t.pauseRuneMap = map[protocol.PauseState]rune{false: '>', true: '>'}
-	if t.screen.CanDisplay('', false) && t.screen.CanDisplay('契', false) {
-		t.pauseRuneMap = map[protocol.PauseState]rune{false: '', true: '契'}
+	if t.screen.CanDisplay('󰏤', false) && t.screen.CanDisplay('󰐊', false) {
+		t.pauseRuneMap = map[protocol.PauseState]rune{false: '󰏤', true: '󰐊'}
 	}
 
 	t.repeatRuneStyleMap = map[protocol.RepeatState]runeStylePair{
@@ -29,13 +29,13 @@ func (t *tui) initIndicatorRunes() {
 		protocol.RepeatStateQueue: {'r', styleDefault},
 		protocol.RepeatStateTrack: {'r', styleUnderline},
 	}
-	if t.screen.CanDisplay('稜', false) && t.screen.CanDisplay('凌', false) &&
-		t.screen.CanDisplay('綾', false) {
+	if t.screen.CanDisplay('󰑗', false) && t.screen.CanDisplay('󰑖', false) &&
+		t.screen.CanDisplay('󰑘', false) {
 
 		t.repeatRuneStyleMap = map[protocol.RepeatState]runeStylePair{
-			protocol.RepeatStateNone:  {'稜', styleDim},
-			protocol.RepeatStateQueue: {'凌', styleDefault},
-			protocol.RepeatStateTrack: {'綾', styleDefault},
+			protocol.RepeatStateNone:  {'󰑗', styleDim},
+			protocol.RepeatStateQueue: {'󰑖', styleDefault},
+			protocol.RepeatStateTrack: {'󰑘', styleDefault},
 		}
 	}
 }
