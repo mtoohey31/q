@@ -11,7 +11,7 @@
       q = final.buildGoModule {
         pname = "q";
         version = "0.1.0";
-        src = ./.;
+        src = builtins.path { path = ./.; name = "q-src"; };
         buildInputs =
           if final.stdenv.hostPlatform.isDarwin then
             with final.darwin.apple_sdk_11_0.frameworks;
