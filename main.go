@@ -12,9 +12,37 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-// TODO: volume normalization
+// TODO(server): decouple queue from playback
 
-// TODO: song gap normalization
+// PERF(tui): double `drawQuery` in `resize`?
+
+// TODO(tui): logging output path, should log warnings on unhandled tcell events
+// and on errors sent by the server (though we also show those too in the ui)
+
+// TODO(server): simplify logging output path configuration stuff by adding an
+// output path to server.Cmd and default to "-" for stdout in that case, but ""
+// in the tui case or something
+
+// TODO(tui): move queue focus index when a song is done playing
+
+// TODO(tui): add queue length indicator (both in # of songs and total duration
+// of songs)
+
+// TODO(tui): smoother progress display
+
+// TODO(server): volume normalization
+
+// TODO(server): song gap normalization
+
+// TODO(server/tui): unsynchronized and synchronized lyrics
+
+// TODO(tui): add mouse support
+
+// TODO: proper docs (manpage, details in README, etc.)
+
+// BUG(server): fix audio artifacts when seeking/skipping while paused then
+// resuming; we probably need to clear some kind of buffer that's saved
+// somewhere
 
 type cli struct {
 	cmd.Globals

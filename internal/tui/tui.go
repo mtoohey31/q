@@ -383,6 +383,9 @@ func (t *tui) loop() (err error) {
 
 						case 'p':
 							if t.clipboardPath == "" {
+								// TODO: surface a warning or error here to
+								// notify the user that nothing happened because
+								// they don't have anything in the clipboard
 								break
 							}
 

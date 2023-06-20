@@ -10,9 +10,9 @@ import (
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
-// TODO: add support for outlook-like queries on metadata as in
-// artist:"PEOPLE 1", album:PEOPLE, which should also match fuzzily and
-// case-insensitively
+// TODO: add support for some sort of query object to filter things based on
+// various attributes such as title, artist, path, etc. Ideally an existing
+// well-known language should be used instead of creating something new
 
 // TODO: write my own fuzzy algorithm so I can tweak the details
 

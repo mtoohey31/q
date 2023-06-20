@@ -66,6 +66,7 @@ func wrapReaderDecoder(d func(io.Reader) (beep.StreamSeekCloser, beep.Format, er
 // formatHandlers contains formatHandler objects for the audio formats
 // supported by this player.
 var formatHandlers = [...]*formatHandler{
+	// TODO: fill this out more
 	formatMp3: mp3FormatHandler,
 	formatFlac: {
 		decode: wrapReaderDecoder(flac.Decode),
