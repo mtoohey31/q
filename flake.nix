@@ -24,24 +24,7 @@
       };
     };
   } // utils.lib.eachDefaultSystem (system: with import nixpkgs
-    {
-      overlays = [
-        (final: _: {
-          gow = final.buildGoModule rec {
-            pname = "gow";
-            version = builtins.substring 0 7 src.rev;
-            src = final.fetchFromGitHub {
-              owner = "mitranim";
-              repo = pname;
-              rev = "a5bfab26a0e42ee646f0969ac3397e80e5e3b1df";
-              sha256 = "vlIbVoAxeeQ1SB8FmSAfQ35fX6f+/VGZmrPDdA3HTvs=";
-            };
-            vendorSha256 = "o6KltbjmAN2w9LMeS9oozB0qz9tSMYmdDW3CwUNChzA=";
-          };
-        })
-        self.overlays.default
-      ]; inherit system;
-    }; {
+    { overlays = [ self.overlays.default ]; inherit system; }; {
     packages.default = q;
 
     devShells = rec {
@@ -59,7 +42,7 @@
       };
 
       default = ci.overrideAttrs (oldAttrs: {
-        nativeBuildInputs = oldAttrs.nativeBuildInputs ++ [ gopls gow ];
+        nativeBuildInputs = oldAttrs.nativeBuildInputs ++ [ gopls ];
       });
     };
   });
