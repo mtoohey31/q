@@ -12,10 +12,6 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-// TODO(server): simplify logging output path configuration stuff by adding an
-// output path to server.Cmd and default to "-" for stdout in that case, but ""
-// in the tui case or something
-
 // TODO(tui): move queue focus index when a song is done playing
 
 // TODO(tui): add queue length indicator (both in # of songs and total duration
@@ -44,6 +40,10 @@ import (
 // PERF(server): launch broadcast stuff that doesn't need to be done before
 // returning in goroutines. Pay careful attention to what needs to be computed
 // before locks are released
+
+// BUG: improve handling of zero values as arguments by using pointers
+
+// BUG(server): fix reshuffle on startup
 
 type cli struct {
 	cmd.Globals
