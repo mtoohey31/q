@@ -34,13 +34,6 @@ func (t *tui) drawQueue() {
 			style = style.Background(tcell.ColorAqua).Foreground(tcell.ColorBlack)
 		}
 
-		shuffleIdxIsNext := i+t.queueScrollIdx+1 == int(t.ShuffleIdx)
-		iIsLast := i+t.queueScrollIdx == len(t.Queue)-1
-		shuffleIdxIsFirst := t.ShuffleIdx == 0
-		if shuffleIdxIsNext || (iIsLast && shuffleIdxIsFirst) {
-			style = style.Underline(true)
-		}
-
 		t.draw(t.queueR.Min.Add(image.Pt(0, i)), ' ', style)
 
 		x := t.drawString(t.queueR.Min.Add(image.Pt(1, i)), t.queueR.Max.X-1, string(t.Queue[i+t.queueScrollIdx]), style)

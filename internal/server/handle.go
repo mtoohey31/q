@@ -27,51 +27,26 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 		s.broadcast(m)
 
 	case protocol.RepeatState:
-		s.repeat.Store(m)
-		s.broadcast(s.repeat.Load().(protocol.RepeatState))
+		s.queueMu.Lock()
+		s.queue.Repeat = m
+		s.queueMu.Unlock()
+
+		s.broadcast(m)
 
 	case protocol.ShuffleState:
-		s.shuffle.Store(bool(m))
+		s.queueMu.Lock()
+		s.queue.Shuffle = m
+		s.queueMu.Unlock()
+
 		s.broadcast(m)
 
 	case protocol.Skip:
-		if m < 0 {
-			respond(protocol.Error("reverse skip not implemented"))
-			break
-		}
-
 		speaker.Lock()
-		// special case: when skipping zero places, we jump to the start of the
-		// now playing song
-		if m == 0 {
-			s.streamerMu.Lock()
-			if s.streamer == nil {
-				break
-			}
-
-			if err := s.streamer.Seek(0); err != nil {
-				s.broadcastErr(fmt.Errorf("seek failed: %w", err))
-
-				s.queueMu.Lock()
-				s.skipLocked(true)
-				s.queueMu.Unlock()
-			}
-
-			s.streamerMu.Unlock()
-			speaker.Unlock()
-			// must come after streamerMu.unlock because this needs to RLock
-			// streamerMu.
-			s.broadcastProgress()
-			break
-		}
-
-		// TODO: implement this in a less horrible, terrible, very bad, no good
-		// way
 		s.queueMu.Lock()
 		s.streamerMu.Lock()
-		for i := 0; i < int(m); i++ {
-			s.skipLocked(false) // broadcasts new now playing... each time...
-		}
+
+		s.skipLocked(int(m))
+
 		s.streamerMu.Unlock()
 		s.queueMu.Unlock()
 		speaker.Unlock()
@@ -86,7 +61,7 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 		)); err != nil {
 			s.broadcastErr(fmt.Errorf("seek failed: %w", err))
 			s.queueMu.Lock()
-			s.skipLocked(true)
+			s.dropTopLocked()
 			s.queueMu.Unlock()
 		}
 		s.streamerMu.Unlock()
@@ -97,22 +72,14 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 	case protocol.Remove:
 		s.queueMu.Lock()
-
-		removeIdx := int(m)
-		if removeIdx >= len(s.queue) || 0 > removeIdx {
+		removed, ok := s.queue.Remove(uint(m))
+		if !ok {
 			s.queueMu.Unlock()
-			respond(protocol.Error(fmt.Sprintf("invalid index for remove request: %d", removeIdx)))
+			respond(protocol.Error(fmt.Sprintf("invalid index for remove request: %d", m)))
 			return
 		}
 
-		removed := protocol.Removed(s.queue[removeIdx].Path)
-
-		s.queue = append(s.queue[:removeIdx], s.queue[removeIdx+1:]...)
-		if removeIdx < int(s.shuffleIdx) {
-			s.decShuffleIdxLocked()
-		}
-
-		if removeIdx == 0 {
+		if m == 0 {
 			speaker.Lock()
 			s.streamerMu.Lock()
 			s.playQueueTopLocked() // broadcasts new now playing
@@ -120,16 +87,15 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 			speaker.Unlock()
 		}
 
+		newQueue := s.getQueueLocked()
 		s.queueMu.Unlock()
 
-		respond(removed)
-		s.broadcastQueue()
+		go s.broadcast(newQueue)
+		go respond(protocol.Removed(removed.Path))
 
 	case protocol.RemoveAll:
 		s.queueMu.Lock()
-
-		s.queue = nil
-		s.shuffleIdx = 0
+		s.queue.Clear()
 
 		speaker.Lock()
 		s.streamerMu.Lock()
@@ -139,21 +105,15 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 		s.queueMu.Unlock()
 
-		s.broadcastQueue()
+		s.broadcast(protocol.QueueState{})
 
 	case protocol.Insert:
 		s.queueMu.Lock()
-
-		if m.Index > len(s.queue) || 0 > m.Index {
+		if !s.queue.Insert(&track.Track{Path: m.Path}, uint(m.Index)) {
 			s.queueMu.Unlock()
 			respond(protocol.Error(fmt.Sprintf("invalid index for insert request: %d", m.Index)))
 			return
 		}
-
-		if m.Index <= int(s.shuffleIdx) && len(s.queue) != 0 {
-			s.shuffleIdx++
-		}
-		s.queue = append(s.queue[:m.Index], append([]*track.Track{{Path: m.Path}}, s.queue[m.Index:]...)...)
 
 		if m.Index == 0 {
 			speaker.Lock()
@@ -163,9 +123,10 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 			speaker.Unlock()
 		}
 
+		newQueue := s.getQueueLocked()
 		s.queueMu.Unlock()
 
-		s.broadcastQueue()
+		s.broadcast(newQueue)
 
 	case protocol.Query:
 		paths, err := query.Query(s.MusicDir, string(m))
@@ -181,7 +142,7 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 	case protocol.Reshuffle:
 		s.queueMu.Lock()
 
-		if len(s.queue) <= 2 {
+		if s.queue.Len() <= 2 {
 			// we don't re-shuffle the now playing song, so we're shuffling
 			//s.queue[1:], and if that's only 1 long, it's not going to have
 			// any effect
@@ -189,47 +150,14 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 			return
 		}
 
-		shuffle(s.queue[1:])
+		s.queue.Reshuffle()
 
+		newQueue := s.getQueueLocked()
 		s.queueMu.Unlock()
 
-		s.broadcastQueue()
-
-	case protocol.Later:
-		s.queueMu.Lock()
-
-		laterIdx := int(m)
-		if laterIdx >= len(s.queue)-1 || 0 > laterIdx {
-			s.queueMu.Unlock()
-			respond(protocol.Error(fmt.Sprintf("invalid index for later request: %d", m)))
-			return
-		}
-
-		if s.shuffle.Load() {
-			insertIdx := rand(laterIdx+2, len(s.queue)+1)
-			s.queue = append(s.queue[:laterIdx],
-				append(s.queue[laterIdx+1:insertIdx],
-					append([]*track.Track{s.queue[laterIdx]},
-						s.queue[insertIdx:]...)...)...)
-		} else {
-			s.queue = append(s.queue[:laterIdx], append(s.queue[laterIdx+1:], s.queue[laterIdx])...)
-		}
-
-		if laterIdx == 0 {
-			speaker.Lock()
-			s.streamerMu.Lock()
-			s.playQueueTopLocked() // broadcasts new now playing
-			s.streamerMu.Unlock()
-			speaker.Unlock()
-		}
-
-		s.queueMu.Unlock()
-
-		s.broadcastQueue()
+		s.broadcast(newQueue)
 
 	default:
 		respond(protocol.Error(fmt.Sprintf("invalid request type: %T", m)))
 	}
-
-	return
 }

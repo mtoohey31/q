@@ -12,8 +12,6 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-// TODO(server): decouple queue from playback
-
 // PERF(tui): double `drawQuery` in `resize`?
 
 // TODO(tui): logging output path, should log warnings on unhandled tcell events
@@ -43,6 +41,14 @@ import (
 // BUG(server): fix audio artifacts when seeking/skipping while paused then
 // resuming; we probably need to clear some kind of buffer that's saved
 // somewhere
+
+// TODO: make comment style (capitalization and periods) consistent
+
+// TODO: re-implement later
+
+// PERF(server): launch broadcast stuff that doesn't need to be done before
+// returning in goroutines. Pay careful attention to what needs to be computed
+// before locks are released
 
 type cli struct {
 	cmd.Globals

@@ -246,10 +246,6 @@ func (t *tui) loop() (err error) {
 					return fmt.Errorf("failed to draw bottom: %w", err)
 				}
 
-			case protocol.ShuffleIdxState:
-				t.ShuffleIdx = m
-				t.drawQueue()
-
 			case protocol.QueueState:
 				t.Queue = m
 				// clamps and redraws
@@ -357,9 +353,6 @@ func (t *tui) loop() (err error) {
 
 						case 'D', 'X':
 							err = t.conn.Send(protocol.RemoveAll{})
-
-						case 'l':
-							err = t.conn.Send(protocol.Later(t.queueFocusIdx))
 
 						case 'S':
 							err = t.conn.Send(protocol.Reshuffle{})

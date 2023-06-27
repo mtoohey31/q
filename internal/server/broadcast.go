@@ -68,21 +68,22 @@ func (s *Server) broadcastErr(err error) {
 // encountered, they will be broadcasted, but the most complete possible value
 // will still be returned. queue should be locked.
 func (s *Server) getNowPlayingLocked() protocol.NowPlayingState {
-	if len(s.queue) == 0 {
+	head, ok := s.queue.Head()
+	if !ok {
 		return protocol.NowPlayingState{}
 	}
 
-	title, err := s.queue[0].Title()
+	title, err := head.Title()
 	if err != nil {
 		s.broadcastErr(fmt.Errorf("failed to get queue[0] title: %w", err))
 	}
 
-	artist, err := s.queue[0].Artist()
+	artist, err := head.Artist()
 	if err != nil {
 		s.broadcastErr(fmt.Errorf("failed to get queue[0] artist: %w", err))
 	}
 
-	cover, err := s.queue[0].Cover()
+	cover, err := head.Cover()
 	if err != nil {
 		s.broadcastErr(fmt.Errorf("failed to get queue[0] cover: %w", err))
 	}
@@ -126,10 +127,10 @@ func (s *Server) broadcastProgress() {
 	s.broadcast(s.getProgress())
 }
 
-// getQueue retrieves the current QueueState.
-func (s *Server) getQueue() protocol.QueueState {
-	qs := make(protocol.QueueState, len(s.queue))
-	for i, track := range s.queue {
+// getQueueLocked retrieves the current QueueState.
+func (s *Server) getQueueLocked() protocol.QueueState {
+	qs := make(protocol.QueueState, s.queue.Len())
+	for i, track := range s.queue.To() {
 		description, err := track.Description()
 		if err != nil {
 			s.broadcastErr(fmt.Errorf("failed to get queue[%d] description: %w", i, err))
@@ -140,12 +141,6 @@ func (s *Server) getQueue() protocol.QueueState {
 	return qs
 }
 
-// broadcastQueue sends the current queue to all clients.
-func (s *Server) broadcastQueue() {
-	s.broadcast(s.getQueue())
-	s.broadcast(s.shuffleIdx)
-}
-
 // getQueue retrieves the current State.
 func (s *Server) getState() protocol.State {
 	s.pausedMu.RLock()
@@ -154,16 +149,18 @@ func (s *Server) getState() protocol.State {
 
 	s.queueMu.RLock()
 	nowPlaying := s.getNowPlayingLocked()
+	repeat := s.queue.Repeat
+	shuffle := s.queue.Shuffle
+	queue := s.getQueueLocked()
 	s.queueMu.RUnlock()
 
 	return protocol.State{
 		NowPlaying: nowPlaying,
 		Pause:      paused,
 		Progress:   s.getProgress(),
-		Repeat:     s.repeat.Load().(protocol.RepeatState),
-		Shuffle:    protocol.ShuffleState(s.shuffle.Load()),
-		ShuffleIdx: s.shuffleIdx,
-		Queue:      s.getQueue(),
+		Repeat:     repeat,
+		Shuffle:    shuffle,
+		Queue:      queue,
 		Version:    protocol.Version,
 	}
 }

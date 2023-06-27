@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"sync/atomic"
 
 	"mtoohey.com/q/internal/cmd"
 	"mtoohey.com/q/internal/protocol"
 	"mtoohey.com/q/internal/query"
 	"mtoohey.com/q/internal/server/channelconn"
+	"mtoohey.com/q/internal/server/queue"
 	"mtoohey.com/q/internal/server/unixsocketconn"
 	"mtoohey.com/q/internal/track"
 
@@ -28,15 +28,12 @@ type Server struct {
 	// this too...
 	pausedMu sync.RWMutex
 	paused   protocol.PauseState
-	repeat   atomic.Value
-	shuffle  atomic.Bool
-	// queueMu protects shuffleIdx and queue.
+	// queueMu protects queue.
 	queueMu sync.RWMutex
 	// shuffleIdx is the index within the queue of the first song that was
 	// played during this repeat of the queue. It may be 0 if no songs have yet
 	// been finished on this repeat.
-	shuffleIdx protocol.ShuffleIdxState
-	queue      []*track.Track
+	queue queue.Queue[*track.Track]
 
 	// resources
 	// streamerMu protects format and streamer. Reads from, seeks of, and
@@ -72,11 +69,9 @@ func NewServer(cmd Cmd, g cmd.Globals, logger *log.Logger) (*Server, error) {
 		logger:  logger,
 		paused:  false,
 	}
-	s.repeat.Store(cmd.Repeat)
-	s.shuffle.Store(bool(cmd.Shuffle))
 
 	pathSet := map[string]struct{}{}
-	s.queue = []*track.Track{}
+	trackList := []*track.Track{}
 	for _, q := range cmd.InitialQueries {
 		newPaths, err := query.Query(s.MusicDir, q)
 		if err != nil {
@@ -85,15 +80,17 @@ func NewServer(cmd Cmd, g cmd.Globals, logger *log.Logger) (*Server, error) {
 
 		for _, p := range newPaths {
 			if _, ok := pathSet[p]; !ok {
-				s.queue = append(s.queue, &track.Track{Path: p})
+				trackList = append(trackList, &track.Track{Path: p})
 				pathSet[p] = struct{}{}
 			}
 		}
 	}
+	s.queue = queue.QueueFrom(trackList)
 	if cmd.Shuffle {
-		shuffle(s.queue)
+		s.queue.Reshuffle()
 	}
-	s.shuffleIdx = 0
+	s.queue.Repeat = cmd.Repeat
+	s.queue.Shuffle = cmd.Shuffle
 	s.playQueueTopLocked()
 
 	s.channelListener = channelconn.NewChannelListener()
@@ -151,8 +148,9 @@ func (s *Server) streamLocked(samples [][2]float64) (n int, ok bool) {
 		if !ok {
 			// if the streamer failed, warn and set err so that we'll skip
 			// below
-			if err = s.streamer.Err(); err != nil {
-				s.broadcastErr(fmt.Errorf("streamer failed: %w", err))
+			err = s.streamer.Err()
+			if err != nil {
+				go s.broadcastErr(fmt.Errorf("streamer failed: %w", err))
 			}
 		}
 
@@ -161,7 +159,11 @@ func (s *Server) streamLocked(samples [][2]float64) (n int, ok bool) {
 			// if we ran into an error with the current streamer, drop it from
 			// the queue, regardless of the repeat setting
 			s.queueMu.Lock()
-			s.skipLocked(err != nil)
+			if err != nil {
+				s.dropTopLocked()
+			} else {
+				s.skipLocked(1)
+			}
 			s.queueMu.Unlock()
 
 			// recursively continue streaming after the skip to avoid silence,
@@ -187,83 +189,26 @@ func (*Server) Err() error {
 	return nil
 }
 
-func (s *Server) decShuffleIdxLocked() {
-	newIdx := s.shuffleIdx - 1
-	if newIdx < 0 {
-		newIdx = protocol.ShuffleIdxState(len(s.queue)) - 1
+// dropTopLocked removes the song currently at the top of the queue, and moves
+// to the next one, if one exists. speaker, queue, and streamer should all be
+// locked before a call to this method.
+func (s *Server) dropTopLocked() {
+	_, ok := s.queue.Remove(0)
+	if !ok {
+		return
 	}
-	s.shuffleIdx = newIdx
+
+	s.playQueueTopLocked()
+	go s.broadcast(s.getQueueLocked())
 }
 
 // skipLocked moves to the next song, if there is one. speaker, queue, and
 // streamer should be locked before a call to this method.
-//
-// drop indicates whether the previous song should be forcibly dropped from the
-// queue (such as in the case of an error reading from the current streamer).
-func (s *Server) skipLocked(drop bool) {
-	// if there's nothing in the queue, there's nothing we can do regardless of
-	// any other states.
-	if len(s.queue) == 0 {
-		return
-	}
-
-	// load repeat once and use it for the rest of the function
-	repeat := s.repeat.Load().(protocol.RepeatState)
-
-	// if we're not required to drop the current song, and if we're repeating
-	// either the current track, or the whole queue but there's only one song
-	// in the queue...
-	if !drop && (repeat == protocol.RepeatStateTrack ||
-		(repeat == protocol.RepeatStateQueue && len(s.queue) == 1)) {
-
-		if err := s.streamer.Seek(0); err != nil {
-			s.broadcastErr(fmt.Errorf("seek failed: %w", err))
-			s.skipLocked(true)
-			return
-		}
-
-		s.broadcast(s.getProgressLocked())
-
-		return
-	}
-
-	// if we make it this far, the queue is going to change unless there are
-	// errors
-
-	if drop || repeat == protocol.RepeatStateNone {
-		s.queue = s.queue[1:]
-	} else if s.shuffle.Load() {
-		// !drop && s.repeat == protocol.RepeatStateQueue since both drop and
-		// protocol.RepeatStateNone are handled immediately above, and
-		// protocol.RepeatStateTrack is handled further above.
-
-		// len(s.queue) >= 2 also because the 0 case is handled at the very top
-		// and the 1 case is handled in by that further above case.
-
-		var insertIdx int
-		switch s.shuffleIdx {
-		case 0, 1:
-			// special case: we should try to avoid putting the current track
-			// next and playing it twice in a row if shuffleIdx is 0 or 1, and
-			// we also have to ensure in the case where it's 0 that insertIdx
-			// won't be 0 leading to invalid indexing below
-
-			insertIdx = rand(2, len(s.queue)+1)
-		default:
-			insertIdx = rand(int(s.shuffleIdx), len(s.queue)+1)
-		}
-
-		s.queue = append(s.queue[1:insertIdx], append([]*track.Track{s.queue[0]}, s.queue[insertIdx:]...)...)
-	} else {
-		// !s.shuffle
-
-		s.queue = append(s.queue[1:], s.queue[0])
-	}
-	s.decShuffleIdxLocked()
+func (s *Server) skipLocked(n int) {
+	s.queue.Skip(n)
 
 	s.playQueueTopLocked()
-
-	s.broadcastQueue()
+	go s.broadcast(s.getQueueLocked())
 }
 
 // playQueueTopLocked closes the current streamer, then begins decoding the
@@ -277,7 +222,8 @@ func (s *Server) playQueueTopLocked() {
 		}
 	}
 
-	if len(s.queue) == 0 {
+	head, ok := s.queue.Head()
+	if !ok {
 		s.streamer = nil
 		s.format = beep.Format{}
 		s.broadcastNowPlayingLocked()
@@ -287,11 +233,11 @@ func (s *Server) playQueueTopLocked() {
 
 	var streamer beep.StreamSeekCloser
 	var err error
-	streamer, s.format, err = s.queue[0].Decode()
+	streamer, s.format, err = head.Decode()
 	if err != nil {
 		s.streamer, s.format = nil, beep.Format{}
 		s.broadcastErr(fmt.Errorf("failed to decode queue[0]: %w", err))
-		s.skipLocked(true)
+		s.dropTopLocked() // recursively calls playQueueTopLocked after dropping
 		return
 	}
 	if s.format.SampleRate == s.SampleRate {

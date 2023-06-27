@@ -166,9 +166,6 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 			Path:  absPath,
 		}
 
-	case "remote later <index>":
-		m = protocol.Later(c.Later.Index)
-
 	default:
 		panic(fmt.Sprintf(`unhandled command "%s"`, ctx.Command()))
 	}
