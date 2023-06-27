@@ -61,14 +61,14 @@ func (s *Server) Serve() (err error) {
 
 	// listener accept routines
 	for _, l := range s.listeners {
-		s.logger.Printf("starting %s", l)
+		s.logger.Printf("starting listener %s", l)
 
 		if err := l.Listen(); err != nil {
 			close(s.closed)
 			return fmt.Errorf("listen failed: %w", err)
 		}
 
-		s.logger.Printf("started %s", l)
+		s.logger.Printf("started listener %s", l)
 
 		defer func(l protocol.Listener) {
 			closeErr := l.Close()
@@ -100,7 +100,13 @@ func (s *Server) Serve() (err error) {
 					return
 				}
 
-				clientCh <- conn
+				select {
+				case <-s.closed:
+					// handle the server being stopped while sending client
+					return
+
+				case clientCh <- conn:
+				}
 			}
 		}(l)
 	}

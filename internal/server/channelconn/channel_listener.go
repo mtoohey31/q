@@ -3,64 +3,54 @@ package channelconn
 import (
 	"fmt"
 	"net"
-	"sync"
+	"sync/atomic"
 
 	"mtoohey.com/q/internal/protocol"
 )
 
 // ChannelListener listens for channel connections.
 type ChannelListener struct {
-	// closedMu protects closed
-	closedMu sync.Mutex
-	// closed gets closed when this listener is closed.
-	closed chan struct{}
+	// closed indicates that the connection has been closed.
+	closed atomic.Bool
+	// closedCh gets closed when this listener is closed.
+	closedCh chan struct{}
 
-	// connMu protects conn.
-	connMu sync.RWMutex
 	// connCh is used to send connections from a call to Conn to a waiting call
 	// to Accept.
 	connCh chan *ChannelConn
 }
 
 func (cl *ChannelListener) Close() error {
-	cl.closedMu.Lock()
-
-	select {
-	case <-cl.closed:
-		// already closed, do nothing
-		cl.closedMu.Unlock()
-
-	default:
-		// should stop calls to Accept and Conn soon
-		close(cl.closed)
-		cl.closedMu.Unlock()
-
-		// wait for Accept and Conn calls to end
-		cl.connMu.Lock()
-
-		close(cl.connCh)
-		cl.connCh = nil
-
-		cl.connMu.Unlock()
+	if cl.closed.Swap(true) {
+		// Already closed, don't need to do anything.
+		return nil
 	}
+
+	// Stop all calls to Accept and Conn.
+	close(cl.closedCh)
+
+	// Clean this up.
+	close(cl.connCh)
 
 	return nil
 }
 
 func (cl *ChannelListener) Listen() error { return nil }
 
+var errListenerClosed = fmt.Errorf("channel listener closed: %w", net.ErrClosed)
+
 func (cl *ChannelListener) Accept() (protocol.Conn, error) {
-	cl.connMu.RLock()
+	if cl.closed.Load() {
+		return nil, errListenerClosed
+	}
 
 	select {
-	case <-cl.closed:
-		cl.connMu.RUnlock()
-		return nil, fmt.Errorf("channel listener closed: %w", net.ErrClosed)
+	case <-cl.closedCh:
+		return nil, errListenerClosed
 
-	case conn, ok := <-cl.connCh: // will block forever once cl.connCh is nil
-		cl.connMu.RUnlock()
+	case conn, ok := <-cl.connCh:
 		if !ok {
-			return nil, fmt.Errorf("channel listener closed: %w", net.ErrClosed)
+			return nil, errListenerClosed
 		}
 
 		return conn, nil
@@ -77,36 +67,39 @@ func (cl *ChannelListener) String() string {
 // while this function is blocked waiting for an accept call, it will return
 // nil.
 func (cl *ChannelListener) Conn() *ChannelConn {
-	cl.connMu.RLock()
+	if cl.closed.Load() {
+		return nil
+	}
 
+	closed := &atomic.Bool{}
+	closedCh := make(chan struct{})
 	clientSend := make(chan protocol.Message)
 	serverSend := make(chan protocol.Message)
 
 	select {
-	case <-cl.closed:
-		cl.connMu.RUnlock()
+	case <-cl.closedCh:
 		return nil
 
 	case cl.connCh <- &ChannelConn{
-		closed:  make(chan struct{}),
-		receive: clientSend,
-		send:    serverSend,
+		closed:   closed,
+		closedCh: closedCh,
+		receive:  clientSend,
+		send:     serverSend,
 	}:
 
-		cl.connMu.RUnlock()
-
 		return &ChannelConn{
-			closed:  make(chan struct{}),
-			receive: serverSend,
-			send:    clientSend,
+			closed:   closed,
+			closedCh: closedCh,
+			receive:  serverSend,
+			send:     clientSend,
 		}
 	}
 }
 
 func NewChannelListener() *ChannelListener {
 	return &ChannelListener{
-		connCh: make(chan *ChannelConn),
-		closed: make(chan struct{}),
+		connCh:   make(chan *ChannelConn),
+		closedCh: make(chan struct{}),
 	}
 }
 
