@@ -45,6 +45,8 @@ import (
 
 // BUG(server): fix reshuffle on startup
 
+// BUG: do more race condition hunting with `go run -race`
+
 type cli struct {
 	cmd.Globals
 	Remote  remote.Cmd `cmd:"" aliases:"r" help:"Communicate with a server."`
