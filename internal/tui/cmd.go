@@ -23,6 +23,8 @@ type Cmd struct {
 	// ServerLogPath is the path of the file the server's logs should be output
 	// to if an internal server must be started.
 	ServerLogPath string `short:"l" type:"path" help:"The path of the file the server's logs should be output to if an internal server must be started."`
+	// TUILogPath is the path of the file the TUI's logs should be output to.
+	TUILogPath string `short:"L" type:"path" help:"The path of a file the TUI's logs should be output to."`
 }
 
 func (c Cmd) Run(g cmd.Globals) (err error) {
@@ -44,18 +46,20 @@ func (c Cmd) Run(g cmd.Globals) (err error) {
 		}
 	}
 
+	var serverLogger *log.Logger
 	if startServer {
 		out := io.Discard
 		if c.ServerLogPath != "" {
-			f, err := os.OpenFile(c.ServerLogPath, os.O_RDWR|os.O_CREATE, 0o600)
+			f, err := os.OpenFile(c.ServerLogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 			if err != nil {
 				return fmt.Errorf("failed to create server log file: %w", err)
 			}
 			out = f
 		}
+		serverLogger = log.New(out, "", log.LstdFlags)
 
 		var s *server.Server
-		s, err = server.NewServer(c.Cmd, g, log.New(out, "", log.LstdFlags))
+		s, err = server.NewServer(c.Cmd, g, serverLogger)
 		if err != nil {
 			return fmt.Errorf("failed to start server: %w", err)
 		}
@@ -107,10 +111,25 @@ func (c Cmd) Run(g cmd.Globals) (err error) {
 		}
 	}
 
-	tui, err := newTUI(c, g, conn)
+	var tuiLogger *log.Logger
+	if c.ServerLogPath == c.TUILogPath && serverLogger != nil {
+		tuiLogger = serverLogger
+	} else if c.TUILogPath != "" {
+		f, err := os.OpenFile(c.TUILogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
+		if err != nil {
+			// This is our responsibility, but ignore the error because we
+			// already have an error to report.
+			_ = conn.Close()
+			return fmt.Errorf("failed to create tui log file: %w", err)
+		}
+		tuiLogger = log.New(f, "", log.LstdFlags)
+	} else {
+		tuiLogger = log.New(io.Discard, "", log.LstdFlags)
+	}
+
+	tui, err := newTUI(c, g, tuiLogger, conn)
 	if err != nil {
-		// this is our responsibility, but ignore the error because we already
-		// have an error to report
+		// Same as above.
 		_ = conn.Close()
 		return fmt.Errorf("failed to create tui: %w", err)
 	}

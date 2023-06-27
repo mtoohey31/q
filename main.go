@@ -12,9 +12,6 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-// TODO(tui): logging output path, should log warnings on unhandled tcell events
-// and on errors sent by the server (though we also show those too in the ui)
-
 // TODO(server): simplify logging output path configuration stuff by adding an
 // output path to server.Cmd and default to "-" for stdout in that case, but ""
 // in the tui case or something

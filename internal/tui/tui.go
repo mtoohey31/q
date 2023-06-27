@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image"
+	"log"
 	"math"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ type tui struct {
 	// constants
 	Cmd
 	cmd.Globals
+	logger *log.Logger
 
 	// resources
 	screen tcell.Screen
@@ -64,10 +66,11 @@ type tui struct {
 // this function returns an error, conn will not be closed; it is the caller's
 // responsibility to close it in that scenario, if they no longer intend to use
 // it.
-func newTUI(cmd Cmd, g cmd.Globals, conn protocol.Conn) (*tui, error) {
+func newTUI(cmd Cmd, g cmd.Globals, logger *log.Logger, conn protocol.Conn) (*tui, error) {
 	t := &tui{
 		Cmd:     cmd,
 		Globals: g,
+		logger:  logger,
 		conn:    conn,
 	}
 
@@ -196,6 +199,8 @@ func (t *tui) loop() (err error) {
 	}()
 	clearErrCh := make(chan struct{})
 	setNewErr := func(err error) {
+		t.logger.Print(err)
+
 		// if there's an existing timeout routine running, stop it
 		if errTimeoutCancel != nil {
 			close(errTimeoutCancel)
@@ -600,6 +605,9 @@ func (t *tui) loop() (err error) {
 				if err != nil {
 					return err
 				}
+
+			default:
+				t.logger.Printf("unhandled event type: %T", ev)
 			}
 		}
 
