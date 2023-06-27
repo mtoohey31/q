@@ -39,9 +39,9 @@ import (
 // returning in goroutines. Pay careful attention to what needs to be computed
 // before locks are released
 
-// BUG: improve handling of zero values as arguments by using pointers
-
 // BUG: do more race condition hunting with `go run -race`
+
+// TODO(remote): make --cycle mutually exclusive with specifying the set value
 
 type cli struct {
 	cmd.Globals
