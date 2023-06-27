@@ -260,7 +260,3 @@ func TestQueue_To(t *testing.T) {
 		assert.Equal(t, expectedSlice, QueueFrom(expectedSlice).To())
 	})
 }
-
-func TestHard(t *testing.T) {
-	t.SkipNow() // TODO: remove this
-}
