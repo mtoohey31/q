@@ -150,7 +150,7 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 			return
 		}
 
-		s.queue.Reshuffle()
+		s.queue.ReshuffleAfterHead()
 
 		newQueue := s.getQueueLocked()
 		s.queueMu.Unlock()

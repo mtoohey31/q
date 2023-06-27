@@ -377,8 +377,14 @@ func (q *Queue[T]) Clear() {
 // Len returns the length of the queue.
 func (q Queue[T]) Len() uint { return q.len }
 
-// Reshuffle pseudo-randomly re-orders the queue.
-func (q *Queue[T]) Reshuffle() {
+// reshuffleOffset pseudo-randomly re-orders the queue, leaving the first n
+// elements untouched.
+func (q *Queue[T]) reshuffleOffset(n uint) {
+	if n >= q.len {
+		// Nothing would be modified, so just return now.
+		return
+	}
+
 	if q.Len() <= 2 {
 		// We can't do anything (and might accidentally pass rand.Shuffle an
 		// invalid input) if we don't have at least three values in the queue.
@@ -387,12 +393,24 @@ func (q *Queue[T]) Reshuffle() {
 
 	s := q.To()
 
-	rand.Shuffle(len(s)-1, func(i, j int) {
-		s[i+1], s[j+1] = s[j+1], s[i+1]
+	m := int(n)
+	rand.Shuffle(len(s)-m, func(i, j int) {
+		s[i+m], s[j+m] = s[j+m], s[i+m]
 	})
 
+	// Just re-create the queue using the new order, only copying the repeat and
+	// shuffle settings. This means old history is lost, which is intentional.
+	oldRepeat, oldShuffle := q.Repeat, q.Shuffle
 	*q = QueueFrom(s)
+	q.Repeat, q.Shuffle = oldRepeat, oldShuffle
 }
+
+// Reshuffle pseudo-randomly re-orders the queue.
+func (q *Queue[T]) Reshuffle() { q.reshuffleOffset(0) }
+
+// ReshuffleAfterHead pseudo-randomly re-orders every element in the queue after
+// the head.
+func (q *Queue[T]) ReshuffleAfterHead() { q.reshuffleOffset(1) }
 
 // To returns an ordered slice representation of the queue.
 func (q Queue[T]) To() []T {

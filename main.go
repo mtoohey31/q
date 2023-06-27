@@ -41,8 +41,6 @@ import (
 
 // BUG: improve handling of zero values as arguments by using pointers
 
-// BUG(server): fix reshuffle on startup
-
 // BUG: do more race condition hunting with `go run -race`
 
 type cli struct {
