@@ -12,8 +12,6 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-// TODO(tui): move queue focus index when a song is done playing
-
 // TODO(tui): add queue length indicator (both in # of songs and total duration
 // of songs)
 
