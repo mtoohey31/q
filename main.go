@@ -12,8 +12,6 @@ import (
 	"github.com/alecthomas/kong"
 )
 
-// PERF(tui): double `drawQuery` in `resize`?
-
 // TODO(tui): logging output path, should log warnings on unhandled tcell events
 // and on errors sent by the server (though we also show those too in the ui)
 

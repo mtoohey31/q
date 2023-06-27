@@ -138,7 +138,6 @@ func (t *tui) resize(w, h int) error {
 	); err != nil {
 		return fmt.Errorf("failed to draw bottom: %w", err)
 	}
-	t.drawQuery()
 
 	return nil
 }
