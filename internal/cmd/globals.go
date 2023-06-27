@@ -11,5 +11,5 @@ type Globals struct {
 	MusicDir string `short:"m" default:"." type:"path" help:"Directory containing music files."`
 	// UnixSocket is the path of the socket to bind or connect to, depending on
 	// the command. No socket is used if this flag is not provided.
-	UnixSocket string `short:"u" help:"The path of the socket to bind or connect to, depending on the command. No socket is used if this flag is not provided."`
+	UnixSocket *string `short:"u" help:"The path of the socket to bind or connect to, depending on the command. No socket is used if this flag is not provided."`
 }

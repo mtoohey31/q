@@ -96,10 +96,10 @@ func NewServer(cmd Cmd, g cmd.Globals, logger *log.Logger) (*Server, error) {
 	s.channelListener = channelconn.NewChannelListener()
 	s.listeners = []protocol.Listener{s.channelListener}
 
-	if s.UnixSocket != "" {
+	if s.UnixSocket != nil {
 		s.listeners = append(s.listeners,
 			&unixsocketconn.UnixSocketListener{
-				SocketPath: s.UnixSocket,
+				SocketPath: *s.UnixSocket,
 			})
 	}
 

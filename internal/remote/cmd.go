@@ -31,7 +31,7 @@ type Cmd struct {
 	// only when there are no arguments.
 	StateDefault struct{} `cmd:"" hidden:"" default:"1"`
 	State        struct {
-		Template string `arg:"" optional:"" help:"Template using Go text/template syntax."`
+		Template *string `arg:"" optional:"" help:"Template using Go text/template syntax."`
 	} `cmd:"" help:"Display current state."`
 
 	Pause struct {
@@ -66,7 +66,11 @@ type Cmd struct {
 }
 
 func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
-	conn, err := unixsocketconn.NewUnixSocketClientConn(g.UnixSocket)
+	if g.UnixSocket == nil {
+		return fmt.Errorf("missing flags: --unix-socket=UNIX-SOCKET")
+	}
+
+	conn, err := unixsocketconn.NewUnixSocketClientConn(*g.UnixSocket)
 	if err != nil {
 		return fmt.Errorf("failed to create connection: %w", err)
 	}
@@ -94,10 +98,10 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 
 	var m protocol.Message
 	switch ctx.Command() {
-	case "remote state", "remote state-default":
-		templateText := c.State.Template
-		if templateText == "" {
-			templateText = defaultTemplateText
+	case "remote state", "remote state-default", "remote state <template>":
+		templateText := defaultTemplateText
+		if c.State.Template != nil {
+			templateText = *c.State.Template
 		}
 
 		t, err := template.New("state").Parse(templateText)

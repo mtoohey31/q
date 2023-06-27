@@ -22,9 +22,9 @@ type Cmd struct {
 	ScrollOff int `short:"o" default:"7" help:"Lines of padding from the cursor to the edge of the screen when scrolling."`
 	// ServerLogPath is the path of the file the server's logs should be output
 	// to if an internal server must be started.
-	ServerLogPath string `short:"l" type:"path" help:"The path of the file the server's logs should be output to if an internal server must be started."`
+	ServerLogPath *string `short:"l" help:"The path of the file the server's logs should be output to if an internal server must be started."`
 	// TUILogPath is the path of the file the TUI's logs should be output to.
-	TUILogPath string `short:"L" type:"path" help:"The path of a file the TUI's logs should be output to."`
+	TUILogPath *string `short:"L" help:"The path of a file the TUI's logs should be output to."`
 }
 
 func (c Cmd) Run(g cmd.Globals) (err error) {
@@ -34,8 +34,8 @@ func (c Cmd) Run(g cmd.Globals) (err error) {
 
 	// start out assuming we will have to start our own server
 	startServer := true
-	if g.UnixSocket != "" {
-		_, err = os.Stat(g.UnixSocket)
+	if g.UnixSocket != nil {
+		_, err = os.Stat(*g.UnixSocket)
 		if err == nil {
 			// only change this assumption if the unix socket flag was
 			// provided and the socket already exists
@@ -49,8 +49,8 @@ func (c Cmd) Run(g cmd.Globals) (err error) {
 	var serverLogger *log.Logger
 	if startServer {
 		out := io.Discard
-		if c.ServerLogPath != "" {
-			f, err := os.OpenFile(c.ServerLogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
+		if c.ServerLogPath != nil {
+			f, err := os.OpenFile(*c.ServerLogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 			if err != nil {
 				return fmt.Errorf("failed to create server log file: %w", err)
 			}
@@ -105,7 +105,7 @@ func (c Cmd) Run(g cmd.Globals) (err error) {
 		conn = channelConn
 	} else {
 		// try to connect to the existing socket
-		conn, err = unixsocketconn.NewUnixSocketClientConn(g.UnixSocket)
+		conn, err = unixsocketconn.NewUnixSocketClientConn(*g.UnixSocket)
 		if err != nil {
 			return fmt.Errorf("failed to connect to existing socket: %w", err)
 		}
@@ -114,8 +114,8 @@ func (c Cmd) Run(g cmd.Globals) (err error) {
 	var tuiLogger *log.Logger
 	if c.ServerLogPath == c.TUILogPath && serverLogger != nil {
 		tuiLogger = serverLogger
-	} else if c.TUILogPath != "" {
-		f, err := os.OpenFile(c.TUILogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
+	} else if c.TUILogPath != nil {
+		f, err := os.OpenFile(*c.TUILogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 		if err != nil {
 			// This is our responsibility, but ignore the error because we
 			// already have an error to report.
