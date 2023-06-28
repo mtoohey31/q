@@ -41,6 +41,10 @@ import (
 
 // TODO(remote): make --cycle mutually exclusive with specifying the set value
 
+// TODO(remote): wait for error responses from server. Will require expanding
+// the protocol with a message type that requests a response, either positive or
+// negative, indicating the outcome of the request
+
 type cli struct {
 	cmd.Globals
 	Remote  remote.Cmd `cmd:"" aliases:"r" help:"Communicate with a server."`
