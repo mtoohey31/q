@@ -60,6 +60,9 @@ type Cmd struct {
 		Index int    `arg:"" help:"Index to insert song at."`
 		Path  string `arg:"" help:"Path of song to insert."`
 	} `cmd:"" help:"Add a song to the queue."`
+	Later struct {
+		Index int `arg:"" help:"Song index to move to later in the queue."`
+	} `cmd:"" help:"Move a song to later in the queue."`
 }
 
 func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
@@ -166,6 +169,9 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 			Index: c.Insert.Index,
 			Path:  absPath,
 		}
+
+	case "remote later <index>":
+		m = protocol.Later(c.Later.Index)
 
 	default:
 		panic(fmt.Sprintf(`unhandled command "%s"`, ctx.Command()))

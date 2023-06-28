@@ -33,8 +33,6 @@ import (
 
 // TODO: make comment style (capitalization and periods) consistent
 
-// TODO: re-implement later
-
 // PERF(server): launch broadcast stuff that doesn't need to be done before
 // returning in goroutines. Pay careful attention to what needs to be computed
 // before locks are released

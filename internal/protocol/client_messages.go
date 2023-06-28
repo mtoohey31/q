@@ -14,6 +14,7 @@ func init() {
 	gob.Register(Query(""))
 	gob.Register(QueryResults(nil))
 	gob.Register(Reshuffle{})
+	gob.Register(Later(0))
 }
 
 // Skip requests that the given number of songs be skipped (may be negative to
@@ -46,3 +47,11 @@ type Query string
 // the now-playing song, which should continue to play). This request is valid
 // regardless of the current shuffle state.
 type Reshuffle struct{}
+
+// Later requests that the track at the given index be relocated to later in
+// the queue. Its new index will be determined similarly to how it would be
+// determined if queue repeat was enabled, the track was at the start of the
+// queue, and it had just been skipped, but with the added guarantee that the
+// new index must be greater than the starting index (which might not happen if
+// not explicitly required in the case where the queue is being shuffled).
+type Later int

@@ -405,12 +405,53 @@ func (q *Queue[T]) reshuffleOffset(n uint) {
 	q.Repeat, q.Shuffle = oldRepeat, oldShuffle
 }
 
-// Reshuffle pseudo-randomly re-orders the queue.
+// Reshuffle pseudo-randomly re-orders the whole queue.
 func (q *Queue[T]) Reshuffle() { q.reshuffleOffset(0) }
 
 // ReshuffleAfterHead pseudo-randomly re-orders every element in the queue after
 // the head.
 func (q *Queue[T]) ReshuffleAfterHead() { q.reshuffleOffset(1) }
+
+// Later shifts the track at the specified index to a random position later in
+// the queue than its current position, if possible. It returns whether the
+// index was in bounds. A true return value does not necessarily mean it was
+// moved such as if for example, i == q.Len() - 1.
+func (q *Queue[T]) Later(i uint) bool {
+	if i >= q.len {
+		return false
+	}
+
+	if i == q.len-1 {
+		// In this case we can't do anything. We still return that the value was
+		// in range.
+		return true
+	}
+
+	curr := q.head
+	for j := uint(0); j < i; j++ {
+		curr = curr.next
+	}
+
+	curr.prev.next = curr.next
+	curr.next.prev = curr.prev
+	if curr == q.repeatStart {
+		q.repeatStart = curr.next
+	}
+
+	moving := curr
+
+	toShiftBy := (rand.Int() % int(q.len-i-1)) + 1
+	for j := 0; j < toShiftBy; j++ {
+		curr = curr.next
+	}
+
+	moving.prev = curr
+	moving.next = curr.next
+	curr.next.prev = moving
+	curr.next = moving
+
+	return true
+}
 
 // To returns an ordered slice representation of the queue.
 func (q Queue[T]) To() []T {

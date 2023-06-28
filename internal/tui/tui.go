@@ -358,6 +358,9 @@ func (t *tui) loop() (err error) {
 						case 'D', 'X':
 							err = t.conn.Send(protocol.RemoveAll{})
 
+						case 'l':
+							err = t.conn.Send(protocol.Later(t.queueFocusIdx))
+
 						case 'S':
 							err = t.conn.Send(protocol.Reshuffle{})
 

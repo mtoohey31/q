@@ -157,6 +157,28 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 		s.broadcast(newQueue)
 
+	case protocol.Later:
+		s.queueMu.Lock()
+
+		if !s.queue.Later(uint(m)) {
+			s.queueMu.Unlock()
+			respond(protocol.Error(fmt.Sprintf("invalid index for later request: %d", m)))
+			return
+		}
+
+		if m == 0 {
+			speaker.Lock()
+			s.streamerMu.Lock()
+			s.playQueueTopLocked() // broadcasts new now playing
+			s.streamerMu.Unlock()
+			speaker.Unlock()
+		}
+
+		newQueue := s.getQueueLocked()
+		s.queueMu.Unlock()
+
+		go s.broadcast(newQueue)
+
 	default:
 		respond(protocol.Error(fmt.Sprintf("invalid request type: %T", m)))
 	}
