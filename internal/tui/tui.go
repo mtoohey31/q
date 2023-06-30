@@ -370,6 +370,9 @@ func (t *tui) loop() (err error) {
 						case 'r':
 							err = t.conn.Send(t.Repeat.Next())
 
+						case 'R':
+							err = t.conn.Send(t.Repeat.Prev())
+
 						case 'n':
 							err = t.conn.Send(protocol.Skip(1))
 

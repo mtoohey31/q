@@ -39,5 +39,10 @@ func (r RepeatState) Next() RepeatState {
 	return (r + 1) % 3
 }
 
+// Prev returns the repeat state preceding the current one.
+func (r RepeatState) Prev() RepeatState {
+	return (r + 2) % 3
+}
+
 // ShuffleState indicates whether the queue is being shuffled.
 type ShuffleState bool
