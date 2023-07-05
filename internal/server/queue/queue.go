@@ -438,6 +438,12 @@ func (q *Queue[T]) Later(i uint) bool {
 		q.repeatStart = curr.next
 	}
 
+	if i == 0 {
+		// If we're moving the head, set the new head to the track after the
+		// current head.
+		q.head = curr.next
+	}
+
 	moving := curr
 
 	toShiftBy := (rand.Int() % int(q.len-i-1)) + 1
