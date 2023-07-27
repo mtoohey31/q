@@ -15,6 +15,7 @@ func init() {
 	gob.Register(QueryResults(nil))
 	gob.Register(Reshuffle{})
 	gob.Register(Later(0))
+	gob.Register(Jump(0))
 }
 
 // Skip requests that the given number of songs be skipped (may be negative to
@@ -55,3 +56,7 @@ type Reshuffle struct{}
 // new index must be greater than the starting index (which might not happen if
 // not explicitly required in the case where the queue is being shuffled).
 type Later int
+
+// Jump requests that the track at the given index become the new head of the
+// queue.
+type Jump int

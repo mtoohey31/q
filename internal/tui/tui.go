@@ -328,7 +328,7 @@ func (t *tui) loop() (err error) {
 						t.queueFocus(math.MaxInt)
 
 					case tcell.KeyEnter:
-						err = t.conn.Send(protocol.Skip(t.queueFocusIdx))
+						err = t.conn.Send(protocol.Jump(t.queueFocusIdx))
 						t.queueFocus(0)
 
 					case tcell.KeyRune:

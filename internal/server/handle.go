@@ -179,6 +179,31 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 		go s.broadcast(newQueue)
 
+	case protocol.Jump:
+		s.queueMu.Lock()
+
+		if uint(m) >= s.queue.Len() {
+			s.queueMu.Unlock()
+			respond(protocol.Error(fmt.Sprintf("invalid index for jump request: %d", m)))
+			return
+		}
+
+		oldShuffle := s.queue.Shuffle
+		s.queue.Shuffle = false
+		s.queue.Skip(int(m))
+		s.queue.Shuffle = oldShuffle
+
+		speaker.Lock()
+		s.streamerMu.Lock()
+		s.playQueueTopLocked() // broadcasts new now playing
+		s.streamerMu.Unlock()
+		speaker.Unlock()
+
+		newQueue := s.getQueueLocked()
+		s.queueMu.Unlock()
+
+		go s.broadcast(newQueue)
+
 	default:
 		respond(protocol.Error(fmt.Sprintf("invalid request type: %T", m)))
 	}
