@@ -20,7 +20,7 @@
         nativeBuildInputs =
           if final.stdenv.hostPlatform.isDarwin
           then [ ] else [ final.pkg-config ];
-        vendorSha256 = null;
+        vendorHash = null;
       };
     };
   } // utils.lib.eachDefaultSystem (system: with import nixpkgs
