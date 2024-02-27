@@ -475,6 +475,10 @@ func (t *tui) loop() (err error) {
 						t.queryString = t.queryString[:t.queryMouseIdx-size] + t.queryString[t.queryMouseIdx:]
 						t.queryMouseIdx -= size
 
+					case tcell.KeyDelete:
+						_, size := utf8.DecodeRuneInString(t.queryString[t.queryMouseIdx:])
+						t.queryString = t.queryString[:t.queryMouseIdx] + t.queryString[t.queryMouseIdx+size:]
+
 					case tcell.KeyRune:
 						r := ev.Rune()
 						t.queryString = strings.Join([]string{
