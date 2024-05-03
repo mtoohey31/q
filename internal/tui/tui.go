@@ -362,7 +362,7 @@ func (t *tui) loop() (err error) {
 							err = t.conn.Send(protocol.Later(t.queueFocusIdx))
 
 						case 'S':
-							err = t.conn.Send(protocol.Reshuffle{})
+							err = t.conn.Send(protocol.ReshuffleAfter(t.queueFocusIdx))
 
 						case 's':
 							err = t.conn.Send(!t.Shuffle)

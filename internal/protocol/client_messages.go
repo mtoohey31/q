@@ -14,6 +14,7 @@ func init() {
 	gob.Register(Query(""))
 	gob.Register(QueryResults(nil))
 	gob.Register(Reshuffle{})
+	gob.Register(ReshuffleAfter(0))
 	gob.Register(Later(0))
 	gob.Register(Jump(0))
 }
@@ -48,6 +49,11 @@ type Query string
 // the now-playing song, which should continue to play). This request is valid
 // regardless of the current shuffle state.
 type Reshuffle struct{}
+
+// ReshuffleAfter requests that the server reshuffle the current queue (leaving
+// the first given number of items untouched). This request is valid regardless
+// of the current shuffle state.
+type ReshuffleAfter int
 
 // Later requests that the track at the given index be relocated to later in
 // the queue. Its new index will be determined similarly to how it would be

@@ -377,9 +377,9 @@ func (q *Queue[T]) Clear() {
 // Len returns the length of the queue.
 func (q Queue[T]) Len() uint { return q.len }
 
-// reshuffleOffset pseudo-randomly re-orders the queue, leaving the first n
+// ReshuffleAfter pseudo-randomly re-orders the queue, leaving the first n
 // elements untouched.
-func (q *Queue[T]) reshuffleOffset(n uint) {
+func (q *Queue[T]) ReshuffleAfter(n uint) {
 	if n >= q.len {
 		// Nothing would be modified, so just return now.
 		return
@@ -406,11 +406,7 @@ func (q *Queue[T]) reshuffleOffset(n uint) {
 }
 
 // Reshuffle pseudo-randomly re-orders the whole queue.
-func (q *Queue[T]) Reshuffle() { q.reshuffleOffset(0) }
-
-// ReshuffleAfterHead pseudo-randomly re-orders every element in the queue after
-// the head.
-func (q *Queue[T]) ReshuffleAfterHead() { q.reshuffleOffset(1) }
+func (q *Queue[T]) Reshuffle() { q.ReshuffleAfter(0) }
 
 // Later shifts the track at the specified index to a random position later in
 // the queue than its current position, if possible. It returns whether the

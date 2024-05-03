@@ -144,13 +144,31 @@ func (s *Server) handle(m protocol.Message, respond func(protocol.Message)) {
 
 		if s.queue.Len() <= 2 {
 			// we don't re-shuffle the now playing song, so we're shuffling
-			//s.queue[1:], and if that's only 1 long, it's not going to have
+			// s.queue[1:], and if that's only 1 long, it's not going to have
 			// any effect
 
 			return
 		}
 
-		s.queue.ReshuffleAfterHead()
+		s.queue.ReshuffleAfter(1)
+
+		newQueue := s.getQueueLocked()
+		s.queueMu.Unlock()
+
+		s.broadcast(newQueue)
+
+	case protocol.ReshuffleAfter:
+		s.queueMu.Lock()
+
+		s.queue.ReshuffleAfter(uint(m))
+
+		if m == 0 {
+			speaker.Lock()
+			s.streamerMu.Lock()
+			s.playQueueTopLocked() // broadcasts new now playing
+			s.streamerMu.Unlock()
+			speaker.Unlock()
+		}
 
 		newQueue := s.getQueueLocked()
 		s.queueMu.Unlock()

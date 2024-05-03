@@ -8,4 +8,4 @@ package protocol
 //
 // Major version increments will be made for backwards-incompatible changes,
 // such as changes to the types of existing messages.
-var Version = "0.5.0"
+var Version = "0.6.0"
