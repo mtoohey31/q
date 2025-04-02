@@ -51,7 +51,10 @@ var ErrTerminalUnsupported = fmt.Errorf("terminal unsupported")
 func WriteImage(w io.Writer, m image.Image, r image.Rectangle) error {
 	// TODO: support iterm and others
 
-	if strings.ToLower(os.Getenv("TERM")) != "xterm-kitty" {
+	switch strings.ToLower(os.Getenv("TERM")) {
+	case "xterm-ghostty", "xterm-kitty":
+
+	default:
 		return ErrTerminalUnsupported
 	}
 
@@ -67,7 +70,7 @@ func WriteImage(w io.Writer, m image.Image, r image.Rectangle) error {
 		return fmt.Errorf("write failed: %w", err)
 	}
 
-	initialCodes := []byte(fmt.Sprintf("a=T,f=100,S=%d,c=%d,r=%d,",
+	initialCodes := []byte(fmt.Sprintf("a=T,f=100,C=1,S=%d,c=%d,r=%d,",
 		buf.Len(), r.Dx(), r.Dy()))
 
 	for buf.Len() > 0 {
@@ -105,7 +108,10 @@ func WriteImage(w io.Writer, m image.Image, r image.Rectangle) error {
 // If no supported protocol is detected for the current terminal, the sentinel
 // error TerminalUnsupported is returned.
 func ClearImages(w io.Writer) error {
-	if strings.ToLower(os.Getenv("TERM")) != "xterm-kitty" {
+	switch strings.ToLower(os.Getenv("TERM")) {
+	case "xterm-ghostty", "xterm-kitty":
+
+	default:
 		return ErrTerminalUnsupported
 	}
 
