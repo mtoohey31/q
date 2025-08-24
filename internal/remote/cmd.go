@@ -63,6 +63,7 @@ type Cmd struct {
 	Later struct {
 		Index int `arg:"" help:"Song index to move to later in the queue."`
 	} `cmd:"" help:"Move a song to later in the queue."`
+	IsRunning struct{} `cmd:"" help:"Check if the server is running."`
 }
 
 func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
@@ -172,6 +173,9 @@ func (c *Cmd) Run(ctx *kong.Context, g cmd.Globals) (err error) {
 
 	case "remote later <index>":
 		m = protocol.Later(c.Later.Index)
+
+	case "remote is-running":
+		return nil
 
 	default:
 		panic(fmt.Sprintf(`unhandled command "%s"`, ctx.Command()))
